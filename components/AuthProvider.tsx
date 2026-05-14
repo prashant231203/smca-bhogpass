@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext, useEffect, useState } from "react";
-import { onAuthStateChanged, User as FirebaseUser, signInWithRedirect, GoogleAuthProvider, signOut } from "firebase/auth";
+import { onAuthStateChanged, User as FirebaseUser, signInWithPopup, GoogleAuthProvider, signOut } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import { getDb, auth } from "@/lib/firebase";
 const db = getDb();
@@ -57,8 +57,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       setLoading(true);
       const provider = new GoogleAuthProvider();
-      await signInWithRedirect(auth, provider);
-      // We don't push router here because redirect will leave the page
+      await signInWithPopup(auth, provider);
+      router.push("/");
     } catch (error: unknown) {
       toast.error(`Login failed: ${error instanceof Error ? error.message : "Unknown error"}`);
       setLoading(false);
