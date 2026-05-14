@@ -35,7 +35,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             setRoleData({ uid: currUser.uid, ...userDoc.data() } as User);
           } else {
             // Check bootstrapped admin (the one that provisioning account used)
-            if (currUser.email === "surelyshubham@gmail.com") {
+            if (currUser.email === "surelyshubham@gmail.com" || currUser.email === process.env.NEXT_PUBLIC_SUPER_ADMIN_EMAIL) {
               setRoleData({ uid: currUser.uid, email: currUser.email, role: "admin", name: "Super Admin" });
             } else {
               setRoleData(null); // No assigned role
