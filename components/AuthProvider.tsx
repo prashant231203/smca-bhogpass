@@ -30,19 +30,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(currUser);
       if (currUser) {
         try {
-          const userDoc = await getDoc(doc(db!, "users", currUser.uid));
-          if (userDoc.exists()) {
-            setRoleData({ uid: currUser.uid, ...userDoc.data() } as User);
+          // Check bootstrapped admin FIRST to bypass AdBlocker database issues
+          if (currUser.email === "surelyshubham@gmail.com" || currUser.email === "prashnat23122003@gmail.com" || currUser.email === process.env.NEXT_PUBLIC_SUPER_ADMIN_EMAIL) {
+            setRoleData({ uid: currUser.uid, email: currUser.email, role: "admin", name: "Super Admin" });
           } else {
-            // Check bootstrapped admin (the one that provisioning account used)
-            if (currUser.email === "surelyshubham@gmail.com" || currUser.email === "prashnat23122003@gmail.com" || currUser.email === process.env.NEXT_PUBLIC_SUPER_ADMIN_EMAIL) {
-              setRoleData({ uid: currUser.uid, email: currUser.email, role: "admin", name: "Super Admin" });
+            const userDoc = await getDoc(doc(db!, "users", currUser.uid));
+            if (userDoc.exists()) {
+              setRoleData({ uid: currUser.uid, ...userDoc.data() } as User);
             } else {
               setRoleData(null); // No assigned role
             }
           }
         } catch (error) {
           console.error("Failed to fetch user role", error);
+          setRoleData(null);
         }
       } else {
         setRoleData(null);
