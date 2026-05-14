@@ -1,13 +1,24 @@
 import * as admin from 'firebase-admin';
-import serviceAccount from '../fir-auth-dc143-firebase-adminsdk-tmxih-0ec0814802.json';
 
 if (!admin.apps.length) {
   try {
-    admin.initializeApp({
-      credential: admin.credential.cert(serviceAccount as any),
-      databaseURL: `https://${serviceAccount.project_id}.firebaseio.com`
-    });
-    console.log("Firebase Admin Initialized Successfully");
+    const projectId = process.env.FIREBASE_PROJECT_ID;
+    const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+    const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n');
+
+    if (!projectId || !clientEmail || !privateKey) {
+        console.warn("Firebase Admin credentials missing. Ensure Vercel environment variables are set.");
+    } else {
+        admin.initializeApp({
+          credential: admin.credential.cert({
+            projectId,
+            clientEmail,
+            privateKey,
+          }),
+          databaseURL: `https://${projectId}.firebaseio.com`
+        });
+        console.log("Firebase Admin Initialized Successfully");
+    }
   } catch (error) {
     console.error('Firebase admin initialization error', error);
   }
