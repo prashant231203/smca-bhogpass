@@ -1,0 +1,144 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() { return request.auth != null; }
+    // Bootstrapped Admin uses User email from runtime.
+    function isBootstrappedAdmin() { return isSignedIn() && request.auth.token.email == "surelyshubham@gmail.com"; }
+    function userRole() { return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role; }
+    function isAdmin() { return isBootstrappedAdmin() || (isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) && userRole() == 'admin'); }
+    function isReceptionist() { return isAdmin() || (isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) && userRole() == 'receptionist'); }
+    function isAccountant() { return isAdmin() || (isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) && userRole() == 'accountant'); }
+
+    function isValidId(id) { return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); }
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['email', 'role']) &&
+             data.email is string && data.email.size() > 0 && data.email.size() <= 200 &&
+             data.role in ['admin', 'receptionist', 'accountant'] &&
+             (data.keys().hasAll(['name']) ? (data.name is string && data.name.size() > 0 && data.name.size() <= 100) : true) &&
+             data.keys().size() <= 3;
+    }
+
+    match /users/{userId} {
+      allow get: if isSignedIn() && (request.auth.uid == userId || isAdmin() || isBootstrappedAdmin());
+      allow list: if isAdmin();
+      allow create: if (isAdmin() || isBootstrappedAdmin()) && isValidId(userId) && isValidUser(incoming());
+      allow update: if (isAdmin() || isBootstrappedAdmin()) && isValidId(userId) && isValidUser(incoming());
+      allow delete: if (isAdmin() || isBootstrappedAdmin());
+    }
+
+    function isValidMember(data) {
+      return data.keys().hasAll(['primaryName', 'membershipId', 'membershipType', 'whatsapp', 'email', 'familyCount']) &&
+             data.primaryName is string && data.primaryName.size() >= 1 && data.primaryName.size() <= 100 &&
+             data.membershipId is string && data.membershipId.size() >= 1 && data.membershipId.size() <= 50 &&
+             data.membershipType in ['Life Member', 'Associate Member', 'Annual Member'] &&
+             data.whatsapp is string && data.whatsapp.size() <= 20 &&
+             data.email is string && data.email.size() <= 200 &&
+             data.familyCount is number && data.familyCount >= 1 && data.familyCount <= 20 &&
+             (data.keys().hasAll(['spouseName']) ? (data.spouseName is string && data.spouseName.size() <= 100) : true) &&
+             (data.keys().hasAll(['childrenNames']) ? (data.childrenNames is list && data.childrenNames.size() <= 20 && (data.childrenNames.size() > 0 ? data.childrenNames[0] is string : true)) : true);
+    }
+
+    match /members/{memberId} {
+      allow read: if isAdmin(); // Only admins manage members
+      allow create: if isAdmin() && isValidId(memberId) && isValidMember(incoming());
+      allow update: if isAdmin() && isValidId(memberId) && isValidMember(incoming());
+      allow delete: if isAdmin();
+    }
+
+    function isValidEvent(data) {
+      return data.keys().hasAll(['name', 'date', 'isActive', 'createdBy']) &&
+             data.name is string && data.name.size() >= 1 && data.name.size() <= 100 &&
+             data.date is string && data.date.size() <= 50 &&
+             data.isActive is bool &&
+             data.createdBy is string && data.createdBy == request.auth.uid &&
+             (data.keys().hasAll(['hasTime']) ? (data.hasTime is bool) : true) &&
+             (data.keys().hasAll(['notes']) ? (data.notes is string && data.notes.size() <= 1000) : true);
+    }
+
+    function isValidEventUpdate(data) {
+      return data.keys().hasAll(['name', 'date', 'isActive', 'createdBy']) &&
+             data.name is string && data.name.size() >= 1 && data.name.size() <= 100 &&
+             data.date is string && data.date.size() <= 50 &&
+             data.isActive is bool &&
+             data.createdBy is string && data.createdBy.size() <= 128 &&
+             (data.keys().hasAll(['hasTime']) ? (data.hasTime is bool) : true) &&
+             (data.keys().hasAll(['notes']) ? (data.notes is string && data.notes.size() <= 1000) : true);
+    }
+
+    match /events/{eventId} {
+      allow get: if isSignedIn(); // All roles might need to read an event
+      allow list: if isSignedIn();
+      allow create: if isAdmin() && isValidId(eventId) && isValidEvent(incoming());
+      allow update: if isAdmin() && isValidId(eventId) && isValidEventUpdate(incoming());
+    }
+
+    function isValidCouponCreate(data) {
+      return data.keys().hasAll(['eventId', 'holderName', 'status', 'source']) &&
+             data.eventId is string && data.eventId.size() <= 128 &&
+             data.holderName is string && data.holderName.size() >= 1 && data.holderName.size() <= 150 &&
+             data.status == 'issued' &&
+             data.source in ['member', 'guest'] &&
+             (data.keys().hasAll(['memberId']) ? (data.memberId is string && data.memberId.size() <= 128) : true) &&
+             (data.keys().hasAll(['notes']) ? (data.notes is string && data.notes.size() <= 1000) : true) &&
+             (data.keys().hasAll(['scannedAt']) ? false : true) &&
+             (data.keys().hasAll(['scannedBy']) ? false : true) &&
+             exists(/databases/$(database)/documents/events/$(data.eventId));
+    }
+
+    function isValidCouponUpdate(data) {
+      return data.keys().hasAll(['eventId', 'holderName', 'status', 'source', 'scannedAt', 'scannedBy']) &&
+             data.eventId is string && data.eventId.size() <= 128 &&
+             data.holderName is string && data.holderName.size() >= 1 && data.holderName.size() <= 150 &&
+             data.status == 'scanned' &&
+             data.source in ['member', 'guest'] &&
+             (data.keys().hasAll(['memberId']) ? (data.memberId is string && data.memberId.size() <= 128) : true) &&
+             (data.keys().hasAll(['notes']) ? (data.notes is string && data.notes.size() <= 1000) : true) &&
+             data.scannedAt is string && data.scannedAt.size() <= 50 &&
+             data.scannedBy == request.auth.uid;
+    }
+
+    match /coupons/{qrId} {
+      // Allow reading specific passes by ID (secure URL) so users can view their pass.
+      allow get: if true;
+      allow list: if isAdmin();
+      // Admin generates member coupons via cloud func, Receptionist creates guest passes
+      allow create: if isValidId(qrId) && isValidCouponCreate(incoming()) && (
+        (isAdmin() && incoming().source == 'member') || 
+        (isReceptionist() && incoming().source == 'guest')
+      );
+      allow update: if isValidId(qrId) && isReceptionist() && isValidCouponUpdate(incoming()) && 
+                    existing().eventId == incoming().eventId &&
+                    existing().holderName == incoming().holderName &&
+                    existing().source == incoming().source &&
+                    (existing().keys().hasAll(['memberId']) ? existing().memberId == incoming().memberId : true) &&
+                    existing().status == 'issued' && 
+                    incoming().status == 'scanned' &&
+                    incoming().diff(existing()).affectedKeys().hasOnly(['status', 'scannedAt', 'scannedBy']);
+    }
+
+    function isValidPayment(data) {
+      return data.keys().hasAll(['amount', 'trustAccount', 'mode', 'memberName', 'collectorUid', 'timestamp']) &&
+             data.keys().size() == 6 &&
+             data.amount is number && data.amount > 0 &&
+             data.trustAccount in ['Trust', 'SMCA'] &&
+             data.mode in ['Cash', 'Card', 'Online'] &&
+             data.memberName is string && data.memberName.size() >= 1 && data.memberName.size() <= 150 &&
+             data.collectorUid == request.auth.uid &&
+             data.timestamp is string && data.timestamp.size() <= 50;
+    }
+
+    match /payments/{payId} {
+      allow get: if isAccountant();
+      allow list: if isAdmin() || (isAccountant() && resource.data.collectorUid == request.auth.uid);
+      allow create: if isAccountant() && isValidId(payId) && isValidPayment(incoming());
+      allow update, delete: if false; 
+    }
+  }
+}

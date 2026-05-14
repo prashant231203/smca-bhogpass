@@ -1,0 +1,91 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "System users with RBAC roles.",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string" },
+        "name": { "type": "string" },
+        "role": { "type": "string", "enum": ["admin", "receptionist", "accountant"] }
+      },
+      "required": ["email", "role"]
+    },
+    "Member": {
+      "title": "Member",
+      "description": "Primary members of the community.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "phone": { "type": "string" },
+        "familyCount": { "type": "number" },
+        "spouseName": { "type": "string" },
+        "childrenNames": { "type": "array", "items": { "type": "string" } }
+      },
+      "required": ["name", "phone", "familyCount"]
+    },
+    "Event": {
+      "title": "Event",
+      "description": "Community events.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "date": { "type": "string" },
+        "isActive": { "type": "boolean" },
+        "createdBy": { "type": "string" }
+      },
+      "required": ["name", "date", "isActive", "createdBy"]
+    },
+    "Coupon": {
+      "title": "Coupon",
+      "description": "Event passes/coupons per family member.",
+      "type": "object",
+      "properties": {
+        "eventId": { "type": "string" },
+        "memberId": { "type": "string" },
+        "holderName": { "type": "string" },
+        "status": { "type": "string", "enum": ["issued", "scanned"] },
+        "scannedAt": { "type": "string", "format": "date-time" },
+        "scannedBy": { "type": "string" },
+        "source": { "type": "string", "enum": ["member", "guest"] }
+      },
+      "required": ["eventId", "holderName", "status", "source"]
+    },
+    "Payment": {
+      "title": "Payment",
+      "description": "Event donations or payments.",
+      "type": "object",
+      "properties": {
+        "amount": { "type": "number" },
+        "trustAccount": { "type": "string", "enum": ["Trust", "SMCA"] },
+        "mode": { "type": "string", "enum": ["Cash", "Card", "Online"] },
+        "memberName": { "type": "string" },
+        "collectorUid": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["amount", "trustAccount", "mode", "memberName", "collectorUid", "timestamp"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "Users with system roles."
+    },
+    "/members/{memberId}": {
+      "schema": { "$ref": "#/entities/Member" },
+      "description": "Community member registry."
+    },
+    "/events/{eventId}": {
+      "schema": { "$ref": "#/entities/Event" },
+      "description": "List of events."
+    },
+    "/coupons/{qrId}": {
+      "schema": { "$ref": "#/entities/Coupon" },
+      "description": "Generated or guest coupons."
+    },
+    "/payments/{payId}": {
+      "schema": { "$ref": "#/entities/Payment" },
+      "description": "Payments collected."
+    }
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "name": "SMCA BhogPass",
+  "description": "Event ERP and mobile-first PWA for community event management with lightning-fast QR scanning, automated family-based coupon issuance, and trust-based donation tracking.",
+  "requestFramePermissions": [
+    "camera"
+  ],
+  "majorCapabilities": []
+}
