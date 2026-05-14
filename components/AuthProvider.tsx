@@ -31,7 +31,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (currUser) {
         try {
           // Check bootstrapped admin FIRST to bypass AdBlocker database issues
-          if (currUser.email === "prashant23122003@gmail.com" || currUser.email === process.env.NEXT_PUBLIC_SUPER_ADMIN_EMAIL) {
+          if (currUser.email === "prashant23122003@gmail.com" || currUser.email === "surelyshubham@gmail.com" || currUser.email === process.env.NEXT_PUBLIC_SUPER_ADMIN_EMAIL) {
             setRoleData({ uid: currUser.uid, email: currUser.email, role: "admin", name: "Super Admin" });
           } else {
             const userDoc = await getDoc(doc(db!, "users", currUser.uid));
