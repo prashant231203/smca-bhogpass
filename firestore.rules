@@ -7,7 +7,7 @@ service cloud.firestore {
 
     function isSignedIn() { return request.auth != null; }
     // Bootstrapped Admin uses User email from runtime.
-    function isBootstrappedAdmin() { return isSignedIn() && request.auth.token.email == "surelyshubham@gmail.com"; }
+    function isBootstrappedAdmin() { return isSignedIn() && (request.auth.token.email == "surelyshubham@gmail.com" || request.auth.token.email == "prashant23122003@gmail.com"); }
     function userRole() { return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role; }
     function isAdmin() { return isBootstrappedAdmin() || (isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) && userRole() == 'admin'); }
     function isReceptionist() { return isAdmin() || (isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) && userRole() == 'receptionist'); }
