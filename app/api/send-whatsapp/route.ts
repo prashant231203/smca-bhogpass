@@ -24,10 +24,13 @@ export async function POST(req: Request) {
     });
 
     if (token && phoneNumberId) {
-      // 1. Send the text summary message
-      // Note: If the user hasn't messaged this business number within 24 hours,
-      // Meta requires you to send an approved 'template' message rather than a free-form 'text'.
-      // For production, you may need to change 'type' to 'template' and map the variables.
+      // Format all passes (e.g. Primary, Spouse, Children) into a bulleted string for {{3}}
+      const passesListString = passes
+        .map((p: Record<string, string>) => `👉 ${p.label}: ${p.url}`)
+        .join('\n');
+
+      // Send the approved Meta Utility Template 'bhogpass_delivery'
+      // This bypasses the 24-hour customer service window constraint!
       const response = await fetch(`https://graph.facebook.com/v18.0/${phoneNumberId}/messages`, {
         method: 'POST',
         headers: {
@@ -37,65 +40,50 @@ export async function POST(req: Request) {
         body: JSON.stringify({
           messaging_product: 'whatsapp',
           to: formattedPhone,
-          type: 'text',
-          text: { body: messageBody }
+          type: 'template',
+          template: {
+            name: 'bhogpass_delivery',
+            language: {
+              code: 'en_US'
+            },
+            components: [
+              {
+                type: 'body',
+                parameters: [
+                  {
+                    type: 'text',
+                    text: name // Maps to {{1}} (Holder Name)
+                  },
+                  {
+                    type: 'text',
+                    text: eventName // Maps to {{2}} (Event Name)
+                  },
+                  {
+                    type: 'text',
+                    text: passesListString // Maps to {{3}} (List of dynamic passes)
+                  }
+                ]
+              }
+            ]
+          }
         })
       });
       
       const data = await response.json();
       if (!response.ok) {
-        console.error("Meta API error (text message):", data);
-        throw new Error(data.error?.message || "Failed to send Meta WhatsApp text message");
+        console.error("Meta API error (template message):", data);
+        throw new Error(data.error?.message || "Failed to send Meta WhatsApp template message");
       }
       
-      console.log(`[WhatsApp Meta] Summary sent to ${formattedPhone}: ${passes.length} passes for ${eventName}`);
-
-      // 2. Send QR code images for each pass
-      const mediaResults = [];
-      for (const pass of passes) {
-        if (pass.id) {
-          // Generate a public QR Code image URL using qrserver.com
-          const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${pass.id}`;
-          const imageCaption = `🎟️ Pass for ${pass.label}\n🔗 View online: ${pass.url}`;
-          
-          try {
-            const mediaResponse = await fetch(`https://graph.facebook.com/v18.0/${phoneNumberId}/messages`, {
-              method: 'POST',
-              headers: {
-                'Authorization': `Bearer ${token}`,
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                messaging_product: 'whatsapp',
-                to: formattedPhone,
-                type: 'image',
-                image: {
-                  link: qrImageUrl,
-                  caption: imageCaption
-                }
-              })
-            });
-            
-            const mediaData = await mediaResponse.json();
-            if (!mediaResponse.ok) {
-              console.error(`Meta API error (image for ${pass.label}):`, mediaData);
-            } else {
-              console.log(`[WhatsApp Meta QR] Successfully sent QR image for ${pass.label} to ${formattedPhone}`);
-              mediaResults.push(mediaData);
-            }
-          } catch (mediaErr) {
-            console.error(`Failed to send QR image for ${pass.label}:`, mediaErr);
-          }
-        }
-      }
-      
-      return NextResponse.json({ success: true, textData: data, mediaResults });
+      console.log(`[WhatsApp Meta Template] Sent to ${formattedPhone}: ${passes.length} passes for ${eventName}`);
+      return NextResponse.json({ success: true, data });
     } else {
       // For now, we simulate success if keys aren't configured so the application logic completes without crashing
-      console.log(`[WhatsApp Simulated] To ${formattedPhone}: ${passes.length} passes for ${eventName} (Meta keys not set)`);
-      passes.forEach((pass: Record<string, string>) => {
-        console.log(`[WhatsApp Simulated QR] ${pass.label} URL: https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${pass.id}`);
-      });
+      console.log(`[WhatsApp Simulated Template] To ${formattedPhone}: ${passes.length} passes for ${eventName} (Meta keys not set)`);
+      const passesListString = passes
+        .map((p: Record<string, string>) => `👉 ${p.label}: ${p.url}`)
+        .join('\n');
+      console.log(`[WhatsApp Simulated Body]\nHello ${name},\n\nYour passes for ${eventName} are ready!\n\n${passesListString}`);
       return NextResponse.json({ success: true, simulated: true });
     }
   } catch (error: unknown) {
