@@ -23,41 +23,57 @@ export async function POST(req: Request) {
     if (token && phoneNumberId) {
       // Send the approved Meta Utility Template 'payment_receipt'
       // Note: If you don't have this template approved yet, this will fail.
-      const response = await fetch(`https://graph.facebook.com/v18.0/${phoneNumberId}/messages`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          messaging_product: 'whatsapp',
-          to: formattedPhone,
-          type: 'template',
-          template: {
-            name: 'payment_receipt', // You need to create and approve this template in Meta
-            language: {
-              code: 'en'
-            },
-            components: [
-              {
-                type: 'body',
-                parameters: [
-                  { type: 'text', text: name },
-                  { type: 'text', text: purpose },
-                  { type: 'text', text: amount.toString() },
-                  { type: 'text', text: mode },
-                  { type: 'text', text: receiptId }
-                ]
-              }
-            ]
-          }
-        })
-      });
-      
-      const data = await response.json();
-      if (!response.ok) {
+      const tryLanguages = ['en', 'en_US', 'en_GB', 'en_IN'];
+      let response;
+      let data;
+
+      for (const lang of tryLanguages) {
+        response = await fetch(`https://graph.facebook.com/v18.0/${phoneNumberId}/messages`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            messaging_product: 'whatsapp',
+            to: formattedPhone,
+            type: 'template',
+            template: {
+              name: 'payment_receipt', // You need to create and approve this template in Meta
+              language: {
+                code: lang
+              },
+              components: [
+                {
+                  type: 'body',
+                  parameters: [
+                    { type: 'text', text: name },
+                    { type: 'text', text: purpose },
+                    { type: 'text', text: amount.toString() },
+                    { type: 'text', text: mode },
+                    { type: 'text', text: receiptId }
+                  ]
+                }
+              ]
+            }
+          })
+        });
+        
+        data = await response.json();
+        
+        if (response.ok) {
+          break;
+        }
+        
+        if (data.error?.code !== 132001) {
+          break;
+        }
+        console.warn(`[WhatsApp] Receipt template not found in locale: ${lang}, trying next...`);
+      }
+
+      if (!response || !response.ok) {
         console.error("Meta API error (template message):", data);
-        throw new Error(data.error?.message || "Failed to send Meta WhatsApp template message");
+        throw new Error(data?.error?.message || "Failed to send Meta WhatsApp template message");
       }
       
       console.log(`[WhatsApp Meta Template] Sent receipt to ${formattedPhone}`);

@@ -31,48 +31,57 @@ export async function POST(req: Request) {
 
       // Send the approved Meta Utility Template 'bhogpass'
       // This bypasses the 24-hour customer service window constraint!
-      const response = await fetch(`https://graph.facebook.com/v18.0/${phoneNumberId}/messages`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          messaging_product: 'whatsapp',
-          to: formattedPhone,
-          type: 'template',
-          template: {
-            name: 'bhogpass',
-            language: {
-              code: 'en'
-            },
-            components: [
-              {
-                type: 'body',
-                parameters: [
-                  {
-                    type: 'text',
-                    text: name // Maps to {{1}} (Holder Name)
-                  },
-                  {
-                    type: 'text',
-                    text: eventName // Maps to {{2}} (Event Name)
-                  },
-                  {
-                    type: 'text',
-                    text: passesListString // Maps to {{3}} (List of dynamic passes)
-                  }
-                ]
-              }
-            ]
-          }
-        })
-      });
-      
-      const data = await response.json();
-      if (!response.ok) {
+      const tryLanguages = ['en', 'en_US', 'en_GB', 'en_IN'];
+      let response;
+      let data;
+
+      for (const lang of tryLanguages) {
+        response = await fetch(`https://graph.facebook.com/v18.0/${phoneNumberId}/messages`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            messaging_product: 'whatsapp',
+            to: formattedPhone,
+            type: 'template',
+            template: {
+              name: 'bhogpass',
+              language: {
+                code: lang
+              },
+              components: [
+                {
+                  type: 'body',
+                  parameters: [
+                    { type: 'text', text: name },
+                    { type: 'text', text: eventName },
+                    { type: 'text', text: passesListString }
+                  ]
+                }
+              ]
+            }
+          })
+        });
+        
+        data = await response.json();
+        
+        if (response.ok) {
+          break;
+        }
+        
+        // If the error is NOT "Template name does not exist in the translation" (132001), 
+        // there is no point trying other languages.
+        if (data.error?.code !== 132001) {
+          break;
+        }
+        console.warn(`[WhatsApp] Template not found in locale: ${lang}, trying next...`);
+      }
+
+      if (!response || !response.ok) {
         console.error("Meta API error (template message):", data);
-        throw new Error(data.error?.message || "Failed to send Meta WhatsApp template message");
+        throw new Error(data?.error?.message || "Failed to send Meta WhatsApp template message");
       }
       
       console.log(`[WhatsApp Meta Template] Sent to ${formattedPhone}: ${passes.length} passes for ${eventName}`);
