@@ -8,6 +8,10 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, error: "No phone number provided" }, { status: 400 });
     }
 
+    if (!Array.isArray(passes) || passes.length === 0) {
+      return NextResponse.json({ success: false, error: "No passes provided" }, { status: 400 });
+    }
+
     // Integration with Meta WhatsApp Cloud API
     const token = process.env.META_WHATSAPP_TOKEN;
     const phoneNumberId = process.env.META_PHONE_NUMBER_ID;
@@ -17,11 +21,6 @@ export async function POST(req: Request) {
     if (!formattedPhone.startsWith('91') && formattedPhone.length === 10) {
       formattedPhone = '91' + formattedPhone; // default to India if just 10 digits
     }
-
-    let messageBody = `Hello ${name},\n\nYour passes for ${eventName} are ready:\n`;
-    passes.forEach((p: Record<string, string>) => {
-      messageBody += `- ${p.label}: ${p.url}\n`;
-    });
 
     if (token && phoneNumberId) {
       const passesListString = passes
