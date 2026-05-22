@@ -21,6 +21,11 @@ import { MemberTable } from "@/components/MemberTable";
 
 export default function AdminPage() {
   const { user, roleData } = useAuth();
+
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    toast.success("Pass link copied to clipboard!");
+  };
   
   // Event State
   const [eventName, setEventName] = useState("");
@@ -32,6 +37,8 @@ export default function AdminPage() {
   const [events, setEvents] = useState<(Event & { id: string })[]>([]);
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
   const [attendees, setAttendees] = useState<(Coupon & { id: string })[]>([]);
+  const [eventCoupons, setEventCoupons] = useState<(Coupon & { id: string })[]>([]);
+  const [couponSearch, setCouponSearch] = useState("");
   const [loadingAttendees, setLoadingAttendees] = useState(false);
   const [eventStats, setEventStats] = useState<Record<string, { issued: number, scanned: number }>>({});
 
@@ -83,11 +90,17 @@ export default function AdminPage() {
       
       // Update Attendees if an event is selected
       if (selectedEventId) {
-        const selectedAttendees = snapshot.docs
-          .map(d => ({ id: d.id, ...d.data() } as Coupon & {id: string}))
+        const mappedCoupons = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Coupon & {id: string}));
+        
+        const selectedAttendees = mappedCoupons
           .filter(c => c.eventId === selectedEventId && c.status === "scanned")
           .sort((a, b) => new Date(b.scannedAt || 0).getTime() - new Date(a.scannedAt || 0).getTime());
         setAttendees(selectedAttendees);
+
+        const selectedEventCoupons = mappedCoupons
+          .filter(c => c.eventId === selectedEventId)
+          .sort((a, b) => a.holderName.localeCompare(b.holderName));
+        setEventCoupons(selectedEventCoupons);
       }
     });
 
@@ -323,7 +336,8 @@ export default function AdminPage() {
                 holderName: holderName.toString().trim(),
                 status: "issued",
                 source: "guest",
-                foodOrders: foodOrders
+                foodOrders: foodOrders,
+                phone: phoneNum.toString().trim()
               };
 
               const p = addDoc(collection(db!, "coupons"), couponData).then(ref => ({
@@ -521,7 +535,8 @@ export default function AdminPage() {
             item: "Entry Pass",
             quantity: pr.quantity,
             claimed: 0
-        }]
+        }],
+        phone: pr.phone.trim()
       };
 
       const p = addDoc(collection(db!, "coupons"), couponData).then(ref => ({
@@ -711,54 +726,232 @@ export default function AdminPage() {
 
               {selectedEventId && (
                 <Card className="mt-8 border-0 shadow-md ring-1 ring-zinc-200 rounded-2xl overflow-hidden">
-                  <CardHeader className="bg-zinc-100/50 border-b border-zinc-100 pb-4 pt-6">
-                    <div className="flex justify-between items-start sm:items-center flex-col sm:flex-row gap-3">
-                      <div>
-                        <CardTitle className="text-lg">Live Scanner Feed</CardTitle>
-                        <CardDescription>Instantaneous updates from the gate.</CardDescription>
+                  <Tabs defaultValue="all_passes" className="w-full">
+                    <CardHeader className="bg-zinc-100/50 border-b border-zinc-100 pb-4 pt-6">
+                      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                        <div>
+                          <CardTitle className="text-lg flex items-center gap-2">
+                            <span>Event Intelligence Panel</span>
+                          </CardTitle>
+                          <CardDescription>
+                            Real-time tracking of passes and guest check-ins.
+                          </CardDescription>
+                        </div>
+                        <div className="flex items-center gap-2 w-full md:w-auto self-stretch md:self-auto justify-between md:justify-end">
+                          <TabsList className="bg-zinc-200/50 p-0.5 rounded-lg border border-zinc-200">
+                            <TabsTrigger value="all_passes" className="text-xs py-1.5 px-3 rounded-md">Sent Passes</TabsTrigger>
+                            <TabsTrigger value="live_feed" className="text-xs py-1.5 px-3 rounded-md">Live Scanner Feed</TabsTrigger>
+                          </TabsList>
+                          <Button variant="outline" size="sm" onClick={exportAttendees} className="bg-white border-zinc-200 text-zinc-700 hover:bg-zinc-50 shadow-sm shrink-0">
+                            <DownloadCloud className="w-4 h-4 mr-2 text-indigo-500" /> Export Report
+                          </Button>
+                        </div>
                       </div>
-                      <Button variant="outline" size="sm" onClick={exportAttendees} className="bg-white border-zinc-200 text-zinc-700 hover:bg-zinc-50 shadow-sm shrink-0">
-                        <DownloadCloud className="w-4 h-4 mr-2 text-indigo-500" /> Export Event Report
-                      </Button>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="p-0 max-h-[400px] overflow-y-auto">
-                    {loadingAttendees ? (
-                      <div className="flex items-center justify-center py-12">
-                        <Loader2 className="w-8 h-8 animate-spin text-indigo-500" />
+                    </CardHeader>
+
+                    <TabsContent value="all_passes" className="m-0">
+                      <div className="p-4 border-b border-zinc-100 bg-zinc-50/30 flex flex-col sm:flex-row gap-3 items-center justify-between">
+                        <div className="relative w-full sm:max-w-xs">
+                          <Input
+                            placeholder="Search by name or phone..."
+                            value={couponSearch}
+                            onChange={(e) => setCouponSearch(e.target.value)}
+                            className="bg-white pl-9 text-sm h-9 rounded-lg"
+                          />
+                          <svg
+                            className="absolute left-3 top-2.5 h-4 w-4 text-zinc-400"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                            />
+                          </svg>
+                        </div>
+                        <div className="text-xs font-semibold text-zinc-500 bg-zinc-100/80 px-3 py-1.5 rounded-full border border-zinc-200 shrink-0">
+                          Found {eventCoupons.filter(c => {
+                            const term = couponSearch.toLowerCase().trim();
+                            if (!term) return true;
+                            return (
+                              c.holderName.toLowerCase().includes(term) ||
+                              (c.phone && c.phone.includes(term))
+                            );
+                          }).length} of {eventCoupons.length} passes
+                        </div>
                       </div>
-                    ) : attendees.length === 0 ? (
-                      <div className="text-center py-12 text-zinc-500 font-medium">Nobody has arrived yet.</div>
-                    ) : (
-                      <div className="divide-y divide-zinc-100">
-                        {attendees.map((attendee) => {
-                          const isRecent = attendee.scannedAt && (new Date().getTime() - new Date(attendee.scannedAt).getTime() < 120000);
-                          return (
-                          <div key={attendee.id} className={`p-4 sm:px-6 flex items-start sm:items-center justify-between transition-colors ${isRecent ? 'bg-emerald-50 hover:bg-emerald-100/80' : 'hover:bg-zinc-50'}`}>
-                            <div className="flex flex-col">
-                              <p className="font-bold text-zinc-900 flex items-center gap-2">
-                                {attendee.holderName}
-                                {isRecent && <span className="flex h-2 w-2 relative"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span><span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span></span>}
-                              </p>
-                              <div className="flex items-center mt-1 space-x-2">
-                                <span className={`inline-flex px-1.5 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider border ${isRecent ? 'bg-emerald-100 text-emerald-700 border-emerald-200' : 'bg-zinc-100 text-zinc-600 border-zinc-200'}`}>
-                                   {attendee.source}
-                                </span>
-                                <span className="text-xs font-medium text-zinc-500">
-                                  {new Date(attendee.scannedAt || "").toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-                                </span>
-                              </div>
-                            </div>
-                            {attendee.notes && (
-                              <div className="text-xs font-medium text-zinc-500 max-w-[140px] sm:max-w-[200px] text-right bg-white p-2 rounded-lg border border-zinc-200 shadow-sm">
-                                {attendee.notes}
-                              </div>
-                            )}
+
+                      <CardContent className="p-0 max-h-[500px] overflow-y-auto">
+                        {loadingAttendees ? (
+                          <div className="flex items-center justify-center py-12">
+                            <Loader2 className="w-8 h-8 animate-spin text-indigo-500" />
                           </div>
-                        )})}
-                      </div>
-                    )}
-                  </CardContent>
+                        ) : eventCoupons.filter(c => {
+                          const term = couponSearch.toLowerCase().trim();
+                          if (!term) return true;
+                          return (
+                            c.holderName.toLowerCase().includes(term) ||
+                            (c.phone && c.phone.includes(term))
+                          );
+                        }).length === 0 ? (
+                          <div className="text-center py-12 text-zinc-500 font-medium">
+                            {couponSearch ? "No passes match your search." : "No passes generated for this event yet."}
+                          </div>
+                        ) : (
+                          <div className="divide-y divide-zinc-100">
+                            {eventCoupons.filter(c => {
+                              const term = couponSearch.toLowerCase().trim();
+                              if (!term) return true;
+                              return (
+                                c.holderName.toLowerCase().includes(term) ||
+                                (c.phone && c.phone.includes(term))
+                              );
+                            }).map((coupon) => (
+                              <div key={coupon.id} className="p-4 sm:px-6 hover:bg-zinc-50/50 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                                <div className="space-y-1.5 flex-1 min-w-0">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <h4 className="font-bold text-zinc-900 truncate">{coupon.holderName}</h4>
+                                    <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                                      coupon.status === "scanned"
+                                        ? "bg-emerald-100 text-emerald-800 border border-emerald-200"
+                                        : "bg-amber-100 text-amber-800 border border-amber-200"
+                                    }`}>
+                                      {coupon.status === "scanned" ? "Arrived" : "Sent"}
+                                    </span>
+                                    <span className="text-[10px] uppercase bg-zinc-100 border border-zinc-200 text-zinc-600 px-1.5 py-0.5 rounded font-semibold">
+                                      {coupon.source}
+                                    </span>
+                                  </div>
+
+                                  <div className="flex flex-col sm:flex-row sm:items-center gap-x-4 gap-y-1 text-xs text-zinc-500">
+                                    {coupon.phone ? (
+                                      <a
+                                        href={`https://wa.me/${coupon.phone.replace(/[^0-9]/g, "")}`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="flex items-center gap-1 text-emerald-600 font-semibold hover:underline"
+                                      >
+                                        <Phone className="w-3.5 h-3.5" />
+                                        {coupon.phone}
+                                      </a>
+                                    ) : (
+                                      <span className="text-zinc-400 italic">No phone saved</span>
+                                    )}
+                                    
+                                    {coupon.status === "scanned" && coupon.scannedAt && (
+                                      <span className="text-zinc-400">
+                                        Arrived at: {new Date(coupon.scannedAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  {/* Food orders list if present */}
+                                  {coupon.foodOrders && coupon.foodOrders.length > 0 && (
+                                    <div className="flex items-center gap-1.5 flex-wrap pt-1">
+                                      <span className="text-xs text-zinc-400 font-medium">Food:</span>
+                                      {coupon.foodOrders.map((ord, idx) => (
+                                        <span
+                                          key={idx}
+                                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-semibold ${
+                                            ord.claimed >= ord.quantity
+                                              ? "bg-emerald-50 text-emerald-700 border border-emerald-100"
+                                              : "bg-amber-50 text-amber-800 border border-amber-100"
+                                          } border`}
+                                        >
+                                          🍲 {ord.item} (x{ord.quantity})
+                                          {ord.claimed > 0 && (
+                                            <span className="text-[10px] bg-zinc-200/60 px-1 rounded text-zinc-600">
+                                              {ord.claimed} claimed
+                                            </span>
+                                          )}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+
+                                <div className="flex items-center gap-2 sm:self-center shrink-0">
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => copyToClipboard(`${window.location.origin}/pass/${coupon.id}`)}
+                                    className="bg-white border-zinc-200 text-zinc-600 hover:text-zinc-900 text-xs h-8 px-2.5 rounded-md"
+                                  >
+                                    Copy Link
+                                  </Button>
+                                  <a
+                                    href={`/pass/${coupon.id}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-bold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200/50 h-8 transition-colors"
+                                  >
+                                    View Pass
+                                    <svg
+                                      className="w-3.5 h-3.5"
+                                      fill="none"
+                                      viewBox="0 0 24 24"
+                                      stroke="currentColor"
+                                    >
+                                      <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth={2}
+                                        d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
+                                      />
+                                    </svg>
+                                  </a>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </CardContent>
+                    </TabsContent>
+
+                    <TabsContent value="live_feed" className="m-0">
+                      <CardContent className="p-0 max-h-[500px] overflow-y-auto">
+                        {loadingAttendees ? (
+                          <div className="flex items-center justify-center py-12">
+                            <Loader2 className="w-8 h-8 animate-spin text-indigo-500" />
+                          </div>
+                        ) : attendees.length === 0 ? (
+                          <div className="text-center py-12 text-zinc-500 font-medium">Nobody has arrived yet.</div>
+                        ) : (
+                          <div className="divide-y divide-zinc-100">
+                            {attendees.map((attendee) => {
+                              const isRecent = attendee.scannedAt && (new Date().getTime() - new Date(attendee.scannedAt).getTime() < 120000);
+                              return (
+                                <div key={attendee.id} className={`p-4 sm:px-6 flex items-start sm:items-center justify-between transition-colors ${isRecent ? 'bg-emerald-50 hover:bg-emerald-100/80' : 'hover:bg-zinc-50'}`}>
+                                  <div className="flex flex-col">
+                                    <p className="font-bold text-zinc-900 flex items-center gap-2">
+                                      {attendee.holderName}
+                                      {isRecent && <span className="flex h-2 w-2 relative"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span><span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span></span>}
+                                    </p>
+                                    <div className="flex items-center mt-1 space-x-2">
+                                      <span className={`inline-flex px-1.5 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider border ${isRecent ? 'bg-emerald-100 text-emerald-700 border-emerald-200' : 'bg-zinc-100 text-zinc-600 border-zinc-200'}`}>
+                                        {attendee.source}
+                                      </span>
+                                      <span className="text-xs font-medium text-zinc-500">
+                                        {new Date(attendee.scannedAt || "").toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                                      </span>
+                                    </div>
+                                  </div>
+                                  {attendee.notes && (
+                                    <div className="text-xs font-medium text-zinc-500 max-w-[140px] sm:max-w-[200px] text-right bg-white p-2 rounded-lg border border-zinc-200 shadow-sm">
+                                      {attendee.notes}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </CardContent>
+                    </TabsContent>
+                  </Tabs>
                 </Card>
               )}
             </div>

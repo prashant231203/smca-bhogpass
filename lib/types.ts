@@ -49,6 +49,8 @@ export interface Coupon {
   memberId?: string;
   holderName: string;
   notes?: string;
+  phone?: string;
+  email?: string;
   
   // New Consolidated Food Array
   foodOrders?: FoodOrder[];
