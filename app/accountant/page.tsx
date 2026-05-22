@@ -28,7 +28,7 @@ export default function AccountantPage() {
   const [recentPayments, setRecentPayments] = useState<(Payment & { id: string })[]>([]);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user || !roleData || (roleData.role !== "accountant" && roleData.role !== "admin")) return;
     const loadRecent = async () => {
       try {
         const q = query(
@@ -45,7 +45,7 @@ export default function AccountantPage() {
       }
     };
     loadRecent();
-  }, [user]);
+  }, [user, roleData]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

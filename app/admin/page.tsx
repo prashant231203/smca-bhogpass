@@ -69,6 +69,8 @@ export default function AdminPage() {
   const [isAddingPreReg, setIsAddingPreReg] = useState(false);
 
   useEffect(() => {
+    if (!user || !roleData || roleData.role !== "admin") return;
+
     loadEvents();
     loadMembers();
     loadPreRegistrations();
@@ -107,7 +109,7 @@ export default function AdminPage() {
     return () => {
       unsubscribeCoupons();
     };
-  }, [selectedEventId]);
+  }, [selectedEventId, user, roleData]);
 
   const loadEvents = async () => {
     try {
@@ -362,7 +364,13 @@ export default function AdminPage() {
                     eventName 
                   })
                 });
-                if (res.ok) messagesSentCount++;
+                if (res.ok) {
+                  messagesSentCount++;
+                } else {
+                  const errData = await res.json().catch(() => ({}));
+                  console.error("Failed to send WhatsApp:", errData.error || res.statusText);
+                  toast.error(`WhatsApp fail: ${errData.error || res.statusText}`);
+                }
               } catch (err) {
                  console.error("Failed to send whatsapp pass to", phoneNum, err);
               }
@@ -554,6 +562,12 @@ export default function AdminPage() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ phone: pr.phone.trim(), name: pr.name.trim(), passes: generatedPasses, eventName })
+        }).then(async (res) => {
+          if (!res.ok) {
+            const errData = await res.json().catch(() => ({}));
+            console.error("WhatsApp error:", errData.error);
+            toast.error(`WhatsApp failed: ${errData.error || res.statusText}`);
+          }
         }).catch(console.error);
       }
 

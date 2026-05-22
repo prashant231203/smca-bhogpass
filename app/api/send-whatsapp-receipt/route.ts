@@ -36,7 +36,7 @@ export async function POST(req: Request) {
           template: {
             name: 'payment_receipt', // You need to create and approve this template in Meta
             language: {
-              code: 'en_US'
+              code: 'en'
             },
             components: [
               {

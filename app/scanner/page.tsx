@@ -85,6 +85,12 @@ export default function ScannerPage() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ phone: guestPhone.trim(), name: guestName.trim(), passes: generatedPasses, eventName })
+        }).then(async (res) => {
+          if (!res.ok) {
+            const errData = await res.json().catch(() => ({}));
+            console.error("WhatsApp error:", errData.error);
+            toast.error(`WhatsApp failed: ${errData.error || res.statusText}`);
+          }
         }).catch(console.error);
       }
 

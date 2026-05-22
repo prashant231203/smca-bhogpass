@@ -44,7 +44,7 @@ export async function POST(req: Request) {
           template: {
             name: 'bhogpass',
             language: {
-              code: 'en_US'
+              code: 'en'
             },
             components: [
               {
