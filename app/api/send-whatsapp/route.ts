@@ -29,7 +29,7 @@ export async function POST(req: Request) {
         .map((p: Record<string, string>) => `👉 ${p.label}: ${p.url}`)
         .join('\n');
 
-      // Send the approved Meta Utility Template 'bhogpass_delivery'
+      // Send the approved Meta Utility Template 'bhogpass'
       // This bypasses the 24-hour customer service window constraint!
       const response = await fetch(`https://graph.facebook.com/v18.0/${phoneNumberId}/messages`, {
         method: 'POST',
@@ -42,7 +42,7 @@ export async function POST(req: Request) {
           to: formattedPhone,
           type: 'template',
           template: {
-            name: 'bhogpass_delivery',
+            name: 'bhogpass',
             language: {
               code: 'en_US'
             },
