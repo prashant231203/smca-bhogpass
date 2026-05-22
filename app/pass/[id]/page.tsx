@@ -118,6 +118,36 @@ export default function PassPage() {
                     </div>
                   </div>
                 )}
+                
+                {coupon.foodItem && (
+                  <div className="flex items-start gap-3 pt-3 border-t border-zinc-200 bg-amber-50/50 -mx-4 px-4 pb-3">
+                    <div className="w-5 h-5 flex items-center justify-center text-xl mt-0.5">🍲</div>
+                    <div>
+                      <p className="text-xs font-bold uppercase tracking-wider text-amber-700/70">Food Assigned (Legacy)</p>
+                      <p className="text-lg font-black text-amber-700">{coupon.foodItem}</p>
+                    </div>
+                  </div>
+                )}
+                
+                {coupon.foodOrders && coupon.foodOrders.length > 0 && (
+                  <div className="pt-3 border-t border-zinc-200 bg-amber-50/50 -mx-4 px-4 pb-4 rounded-b-2xl">
+                    <div className="flex items-center gap-2 mb-3">
+                      <span className="text-xl">🍲</span>
+                      <p className="text-xs font-bold uppercase tracking-wider text-amber-800">Food Orders</p>
+                    </div>
+                    <div className="space-y-2">
+                      {coupon.foodOrders.map((order, idx) => (
+                        <div key={idx} className="flex justify-between items-center bg-white p-2 rounded-lg border border-amber-200/50">
+                           <span className="font-semibold text-zinc-800 text-sm">{order.item}</span>
+                           <div className="flex items-center gap-2">
+                             <span className="text-xs text-zinc-500">{order.claimed} / {order.quantity} Claimed</span>
+                             <span className="font-black text-amber-700 bg-amber-100 px-2 py-0.5 rounded text-sm">x{order.quantity}</span>
+                           </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
             

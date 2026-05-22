@@ -7,8 +7,10 @@ import { getDb } from "@/lib/firebase";
 const db = getDb();
 import { useAuth } from "@/components/AuthProvider";
 import { Card, CardContent } from "@/components/ui/card";
-import { AlertCircle, CheckCircle2, Ticket } from "lucide-react";
+import { AlertCircle, CheckCircle2, Loader2, Utensils, ArrowRight } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { Coupon, FoodOrder } from "@/lib/types";
 
 export function ScannerComponent() {
   const { user } = useAuth();
@@ -19,79 +21,119 @@ export function ScannerComponent() {
     success: boolean;
     message: string;
     holderName?: string;
+    foodOrders?: FoodOrder[];
   } | null>(null);
   
   const [isProcessing, setIsProcessing] = useState(false);
-  const isProcessingRef = useRef(false); // To avoid tracking in dependencies
+  const isProcessingRef = useRef(false);
 
   const processScan = useCallback(async (qrText: string) => {
-    if (isProcessingRef.current || !user) return;
+    if (isProcessingRef.current || !user || scanResult) return;
     
     setIsProcessing(true);
     isProcessingRef.current = true;
     
-    // Attempt haptic feedback
     if (typeof navigator !== 'undefined' && navigator.vibrate) {
       navigator.vibrate(200);
     }
     
     try {
+      // Pause camera scanning immediately during processing and success/fail display
+      if (html5QrCode.current?.isScanning) {
+        html5QrCode.current.pause();
+      }
+
       const couponRef = doc(db!, "coupons", qrText);
-      
+      let holderName = "";
+      let foodOrders: FoodOrder[] = [];
+      let message = "";
+
       await runTransaction(db!, async (transaction) => {
         const couponDoc = await transaction.get(couponRef);
+        if (!couponDoc.exists()) throw new Error("Unrecognised QR Code.");
         
-        if (!couponDoc.exists()) {
-          throw new Error("unrecognised QR Code.");
-        }
-        
-        const data = couponDoc.data();
+        const data = couponDoc.data() as Coupon;
+        holderName = data.holderName;
         
         if (data.status === "scanned") {
           throw new Error(`Already scanned! Holder: ${data.holderName}`);
         }
         
-        if (data.status === "issued") {
-          transaction.update(couponRef, {
-            status: "scanned",
-            scannedAt: new Date().toISOString(),
-            scannedBy: user.uid
-          });
-          setScanResult({ success: true, message: "Valid Pass", holderName: data.holderName });
-        } else {
-           throw new Error("Invalid Pass");
+        const updateData: any = {
+          status: "scanned",
+          scannedAt: new Date().toISOString(),
+          scannedBy: user.uid
+        };
+
+        // Normalize food orders
+        let normalizedOrders = data.foodOrders || [];
+        if (!data.foodOrders && data.foodItem) {
+          normalizedOrders = [{ item: data.foodItem, quantity: 1, claimed: data.foodClaimed ? 1 : 0 }];
         }
+
+        if (normalizedOrders.length > 0) {
+          foodOrders = normalizedOrders;
+          // Claim all food orders in full on the first (and only) scan
+          updateData.foodOrders = normalizedOrders.map(o => ({ ...o, claimed: o.quantity }));
+          updateData.foodClaimed = true;
+          updateData.foodClaimedAt = new Date().toISOString();
+          updateData.foodClaimedBy = user.uid;
+          message = "Food claimed & entry approved!";
+        } else {
+          message = "Entry Approved!";
+        }
+
+        transaction.update(couponRef, updateData);
+      });
+
+      setScanResult({
+        success: true,
+        message,
+        holderName,
+        foodOrders: foodOrders.length > 0 ? foodOrders : undefined
       });
       
     } catch (e: any) {
-      setScanResult({ success: false, message: e.message || "Scan failed" });
-      if (typeof navigator !== 'undefined' && navigator.vibrate) {
-        navigator.vibrate(200); // Standard vibration pattern
-      }
-    }
-    
-    // 1.5-second UI freeze before resuming
-    setTimeout(() => {
-      setScanResult(current => {
-        // Don't clear permission errors automatically
-        if (current?.message.includes("Camera access blocked")) return current;
-        return null;
+      setScanResult({
+        success: false,
+        message: e.message || "Scan failed"
       });
+      if (typeof navigator !== 'undefined' && navigator.vibrate) {
+        navigator.vibrate([100, 50, 100]);
+      }
+    } finally {
       setIsProcessing(false);
-      isProcessingRef.current = false;
-    }, 1500);
-    
-  }, [user]);
+    }
+  }, [user, scanResult]);
+
+  const resetScanner = useCallback(() => {
+    setScanResult(null);
+    setIsProcessing(false);
+    isProcessingRef.current = false;
+    if (html5QrCode.current && html5QrCode.current.getState() === 2 /* PAUSED */) {
+      html5QrCode.current.resume();
+    }
+  }, []);
+
+  // Handle automatic timeout for scanner reset
+  useEffect(() => {
+    if (!scanResult) return;
+
+    const timeoutDuration = scanResult.success ? 4500 : 3000;
+    const timer = setTimeout(() => {
+      resetScanner();
+    }, timeoutDuration);
+
+    return () => clearTimeout(timer);
+  }, [scanResult, resetScanner]);
 
   useEffect(() => {
     if (!readerRef.current) return;
     
-    // Cleanup any existing instance
     if (html5QrCode.current && html5QrCode.current.isScanning) {
        html5QrCode.current.stop().catch(() => {});
     }
 
-    // Initialize scanner
     html5QrCode.current = new Html5Qrcode("reader", { 
        formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE],
        verbose: false
@@ -101,39 +143,22 @@ export function ScannerComponent() {
       try {
         if (html5QrCode.current?.isScanning) return;
         
-        // Explicitly check for constraints first to trigger prompt
         if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
            await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
         }
         
         await html5QrCode.current?.start(
           { facingMode: "environment" },
-          {
-            fps: 10,
-            qrbox: { width: 250, height: 250 },
-          },
-          (decodedText) => {
-            processScan(decodedText);
-          },
-          (errorMessage) => {
-             // Ignoring frequent error messages from empty frames
-          }
+          { fps: 10, qrbox: { width: 250, height: 250 } },
+          (decodedText) => { processScan(decodedText); },
+          () => {}
         );
       } catch (err: any) {
-        console.error("Failed to start scanner", err);
-        // Ignore "already under transition" errors that happen when hot-reloading
         if (String(err).includes("already under transition")) return;
-        
         if (err?.name === "NotAllowedError" || String(err).includes("NotAllowedError") || String(err).includes("Permission denied")) {
-          setScanResult({
-            success: false,
-            message: "Camera access blocked. Please click 'Open in new tab' (top right) or allow camera permissions in your browser.",
-          });
+          setScanResult({ success: false, message: "Camera access blocked. Please grant camera permission." });
         } else {
-           setScanResult({
-            success: false,
-            message: "Failed to access camera. Device may not support it or it's currently in use.",
-          });
+          setScanResult({ success: false, message: "Failed to access camera. Please check camera connections." });
         }
       }
     };
@@ -142,43 +167,93 @@ export function ScannerComponent() {
 
     return () => {
       if (html5QrCode.current?.isScanning) {
-        html5QrCode.current.stop()
-         .then(() => html5QrCode.current?.clear())
-         .catch((err) => console.error("Error stopping scanner", err));
+        html5QrCode.current.stop().then(() => html5QrCode.current?.clear()).catch(() => {});
       }
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Run ONLY once when mounted
+  }, [processScan]);
 
   return (
-    <Card className="overflow-hidden border-2 shadow-2xl ring-4 ring-zinc-900 border-zinc-900 mx-auto max-w-sm relative rounded-2xl">
-      <CardContent className="p-0 bg-black min-h-[300px] flex items-center justify-center relative">
-        <div id="reader" ref={readerRef} className="w-full h-full min-h-[300px]" style={{ border: 'none' }} />
-        
-        {/* Overlay for processing/results */}
-        {(isProcessing || scanResult) && (
-           <div className={cn(
-             "absolute z-10 inset-0 flex flex-col items-center justify-center p-6 text-center animate-in fade-in zoom-in duration-200",
-             scanResult?.success === true ? "bg-emerald-600 text-white" : 
-             scanResult?.success === false ? "bg-rose-600 text-white" : 
-             "bg-indigo-600/90 text-white backdrop-blur-md"
-           )}>
-             {scanResult ? (
-               <>
-                 {scanResult.success ? <CheckCircle2 className="w-24 h-24 mb-4 animate-bounce drop-shadow-md" /> : <AlertCircle className="w-24 h-24 mb-4 animate-pulse drop-shadow-md" />}
-                 <h3 className="text-4xl font-black uppercase tracking-tight mb-2 drop-shadow-md">{scanResult.success ? "Approved" : "Denied"}</h3>
-                 {scanResult.holderName && <p className="text-2xl font-bold font-mono bg-black/30 py-2 px-4 rounded-xl mt-2 drop-shadow-md">{scanResult.holderName}</p>}
-                 <p className="mt-4 text-white/95 font-bold text-lg drop-shadow-md">{scanResult.message}</p>
-               </>
-             ) : (
-                <div className="flex flex-col items-center">
-                  <Ticket className="w-16 h-16 mb-4 animate-spin drop-shadow-md" />
-                  <p className="text-xl font-black tracking-widest uppercase drop-shadow-md">Verifying</p>
-                </div>
-             )}
-           </div>
-        )}
-      </CardContent>
-    </Card>
+    <div className="relative">
+      <Card className="overflow-hidden border-2 shadow-2xl ring-4 ring-zinc-900 border-zinc-900 mx-auto max-w-sm relative rounded-2xl">
+        <CardContent className="p-0 bg-black min-h-[300px] flex items-center justify-center relative">
+          <div id="reader" ref={readerRef} className="w-full h-full min-h-[300px]" style={{ border: 'none' }} />
+          
+          {/* Processing Overlay */}
+          {isProcessing && !scanResult && (
+            <div className="absolute z-10 inset-0 flex flex-col items-center justify-center p-6 text-center bg-indigo-900/90 text-white backdrop-blur-md animate-in fade-in duration-200">
+              <Loader2 className="w-16 h-16 mb-4 animate-spin text-white drop-shadow-md" />
+              <p className="text-xl font-black tracking-widest uppercase">Verifying Pass</p>
+            </div>
+          )}
+
+          {/* Result Overlay */}
+          {scanResult && (
+            <div className={cn(
+              "absolute z-20 inset-0 flex flex-col items-center justify-between p-6 text-center animate-in fade-in zoom-in-95 duration-200 text-white",
+              scanResult.success 
+                ? "bg-gradient-to-br from-emerald-600 to-teal-700" 
+                : "bg-gradient-to-br from-rose-600 to-red-700"
+            )}>
+              <div className="w-full flex-1 flex flex-col items-center justify-center py-4">
+                {scanResult.success ? (
+                  <CheckCircle2 className="w-20 h-20 mb-3 animate-bounce drop-shadow-md text-emerald-100" />
+                ) : (
+                  <AlertCircle className="w-20 h-20 mb-3 animate-pulse drop-shadow-md text-rose-100" />
+                )}
+                
+                <h3 className="text-3xl font-black uppercase tracking-tight mb-1 drop-shadow-md animate-pulse">
+                  {scanResult.success ? "Approved" : "Denied"}
+                </h3>
+                
+                {scanResult.holderName && (
+                  <p className="text-xl font-bold font-sans bg-black/25 py-1.5 px-4 rounded-xl mt-2 max-w-full truncate drop-shadow-md border border-white/10">
+                    {scanResult.holderName}
+                  </p>
+                )}
+                
+                <p className="mt-2 text-white/90 text-sm font-semibold drop-shadow-sm px-2">
+                  {scanResult.message}
+                </p>
+
+                {/* Display food orders clearly */}
+                {scanResult.success && scanResult.foodOrders && scanResult.foodOrders.length > 0 && (
+                  <div className="w-full mt-4 bg-white/10 backdrop-blur-sm border border-white/20 rounded-2xl p-3 text-left space-y-1.5 max-h-[140px] overflow-y-auto">
+                    <p className="text-[10px] font-black uppercase tracking-wider text-emerald-200 flex items-center gap-1 mb-1">
+                      <Utensils className="w-3 h-3" /> Serve Food Items
+                    </p>
+                    <div className="space-y-1">
+                      {scanResult.foodOrders.map((order, idx) => (
+                        <div key={idx} className="flex justify-between items-center bg-black/15 py-1 px-2.5 rounded-lg border border-white/5">
+                          <span className="text-xs font-bold text-white truncate max-w-[180px]">{order.item}</span>
+                          <span className="font-mono font-black text-xs bg-emerald-500 text-white px-2 py-0.5 rounded shadow-sm">
+                            QTY: {order.quantity}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Action Button */}
+              <div className="w-full pt-2">
+                <Button 
+                  onClick={resetScanner}
+                  variant="outline"
+                  className={cn(
+                    "w-full h-11 text-sm font-bold rounded-xl border-white/20 bg-white/10 text-white transition-all shadow-lg",
+                    scanResult.success 
+                      ? "hover:bg-white hover:text-emerald-950" 
+                      : "hover:bg-white hover:text-rose-950"
+                  )}
+                >
+                  Scan Next <ArrowRight className="w-4 h-4 ml-1.5" />
+                </Button>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
   );
 }

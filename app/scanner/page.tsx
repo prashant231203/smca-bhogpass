@@ -17,8 +17,12 @@ import { toast } from "sonner";
 import { Loader2, QrCode } from "lucide-react";
 
 export default function ScannerPage() {
-  const { user, roleData } = useAuth();
+  const { roleData } = useAuth();
   const [guestName, setGuestName] = useState("");
+  const [guestSpouse, setGuestSpouse] = useState("");
+  const [guestChildren, setGuestChildren] = useState(0);
+  const [guestPhone, setGuestPhone] = useState("");
+  const [guestEmail, setGuestEmail] = useState("");
   const [guestNotes, setGuestNotes] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -42,26 +46,63 @@ export default function ScannerPage() {
 
       const activeEventId = activeEvents.docs[0].id;
 
-      const couponData = {
-        eventId: activeEventId,
-        holderName: guestName.trim() + " (Guest)",
-        status: "issued",
-        source: "guest",
-        ...(guestNotes && { notes: guestNotes })
-      };
+      const passesToIssue = [guestName.trim() + " (Primary Guest)"];
+      if (guestSpouse.trim()) {
+        passesToIssue.push(guestSpouse.trim() + " (Guest Spouse)");
+      }
+      for (let i = 0; i < guestChildren; i++) {
+        passesToIssue.push(`Guest Child ${i + 1}`);
+      }
 
-      const docRef = await addDoc(collection(db!, "coupons"), couponData);
-      toast.success(`Guest pass created for ${guestName}`);
+      const passPromises = passesToIssue.map(holder => {
+        const couponData = {
+          eventId: activeEventId,
+          holderName: holder,
+          status: "issued",
+          source: "guest",
+          ...(guestNotes && { notes: guestNotes })
+        };
+        return addDoc(collection(db!, "coupons"), couponData).then(ref => ({
+          id: ref.id,
+          label: holder,
+          url: `${window.location.origin}/pass/${ref.id}`
+        }));
+      });
+
+      const generatedPasses = await Promise.all(passPromises);
+      const eventName = activeEvents.docs[0].data().name || "Event";
+
+      if (guestEmail.trim()) {
+        fetch("/api/send-pass", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: guestEmail.trim(), name: guestName.trim(), passes: generatedPasses, eventName })
+        }).catch(console.error);
+      }
+
+      if (guestPhone.trim()) {
+        fetch("/api/send-whatsapp", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ phone: guestPhone.trim(), name: guestName.trim(), passes: generatedPasses, eventName })
+        }).catch(console.error);
+      }
+
+      toast.success(`Generated ${generatedPasses.length} guest passes for ${guestName}'s group!`);
       
-      // Optionally provide a link to view the pass
+      // Optionally provide a link to view the primary pass
       toast("Pass Ready", {
         action: {
-          label: "View Pass",
-          onClick: () => window.open(`/pass/${docRef.id}`, "_blank"),
+          label: "View Primary Pass",
+          onClick: () => window.open(`/pass/${generatedPasses[0].id}`, "_blank"),
         },
       });
 
       setGuestName("");
+      setGuestSpouse("");
+      setGuestChildren(0);
+      setGuestPhone("");
+      setGuestEmail("");
       setGuestNotes("");
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "Failed to create guest pass");
@@ -101,14 +142,61 @@ export default function ScannerPage() {
               </CardHeader>
               <CardContent className="sm:px-8 pb-8">
                 <form onSubmit={createGuestPass} className="space-y-5">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="guestName" className="font-semibold text-zinc-700">Primary Guest Name</Label>
+                      <Input 
+                        id="guestName" 
+                        placeholder="E.g. Rahul Sharma" 
+                        value={guestName}
+                        onChange={(e) => setGuestName(e.target.value)}
+                        required
+                        className="bg-zinc-50/50"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="guestSpouse" className="font-semibold text-zinc-700">Spouse Name <span className="font-normal text-zinc-400">(Opt)</span></Label>
+                      <Input 
+                        id="guestSpouse" 
+                        placeholder="E.g. Priya Sharma" 
+                        value={guestSpouse}
+                        onChange={(e) => setGuestSpouse(e.target.value)}
+                        className="bg-zinc-50/50"
+                      />
+                    </div>
+                  </div>
+                  
                   <div className="space-y-2">
-                    <Label htmlFor="guestName" className="font-semibold text-zinc-700">Guest Full Name</Label>
+                     <Label htmlFor="guestChildren" className="font-semibold text-zinc-700">Number of Children / Extra Guests</Label>
+                     <Input 
+                       id="guestChildren" 
+                       type="number"
+                       min="0"
+                       max="10"
+                       value={guestChildren.toString()}
+                       onChange={(e) => setGuestChildren(parseInt(e.target.value) || 0)}
+                       className="bg-zinc-50/50 max-w-[150px]"
+                     />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="guestPhone" className="font-semibold text-zinc-700">WhatsApp Number <span className="font-normal text-zinc-400">(Opt)</span></Label>
                     <Input 
-                      id="guestName" 
-                      placeholder="E.g. Rahul Sharma" 
-                      value={guestName}
-                      onChange={(e) => setGuestName(e.target.value)}
-                      required
+                      id="guestPhone" 
+                      type="tel"
+                      placeholder="E.g. 919876543210 (with country code)" 
+                      value={guestPhone}
+                      onChange={(e) => setGuestPhone(e.target.value)}
+                      className="bg-zinc-50/50"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="guestEmail" className="font-semibold text-zinc-700">Email Address <span className="font-normal text-zinc-400">(Opt)</span></Label>
+                    <Input 
+                      id="guestEmail" 
+                      type="email"
+                      placeholder="E.g. rahul@example.com" 
+                      value={guestEmail}
+                      onChange={(e) => setGuestEmail(e.target.value)}
                       className="bg-zinc-50/50"
                     />
                   </div>

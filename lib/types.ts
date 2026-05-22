@@ -17,21 +17,50 @@ export interface Member {
 }
 
 export interface Event {
+  id?: string;
   name: string;
-  date: string; // Will store the date+time in ISO format or string
-  hasTime?: boolean; // Track if the timer was used
-  notes?: string; // Optional notes
+  date: string;
   isActive: boolean;
   createdBy: string;
+  createdAt?: string;
+  foodMenu?: string[];
+  hasTime?: boolean;
+  notes?: string;
+}
+
+export interface PreRegistration {
+  id?: string;
+  name: string;
+  phone: string;
+  quantity: number;
+  eventId: string;
+  status: "pending" | "paid";
+  createdAt: string;
+}
+
+export interface FoodOrder {
+  item: string;
+  quantity: number;
+  claimed: number;
 }
 
 export interface Coupon {
   eventId: string;
   memberId?: string;
   holderName: string;
-  notes?: string; // Optional notes
+  notes?: string;
+  
+  // New Consolidated Food Array
+  foodOrders?: FoodOrder[];
+  
+  // Legacy fields (optional if keeping for backwards compatibility, but better to remove or just mark optional)
+  foodItem?: string; 
+  foodClaimed?: boolean; 
+  foodClaimedAt?: string;
+  foodClaimedBy?: string;
+  
   status: "issued" | "scanned";
-  scannedAt?: string; // ISO string representing date
+  scannedAt?: string;
   scannedBy?: string;
   source: "member" | "guest";
 }
@@ -41,6 +70,8 @@ export interface Payment {
   trustAccount: "Trust" | "SMCA";
   mode: "Cash" | "Card" | "Online";
   memberName: string;
+  phone?: string;
+  purpose?: string;
   collectorUid: string;
   timestamp: string;
 }

@@ -13,3 +13,9 @@ firebase-debug.log
 firebase-debug.*.log
 *-firebase-adminsdk-*.json
 fir-*.json
+
+# Antigravity binaries
+Antigravity-x64.exe
+Antigravity-ia32.exe
+Antigravity-arm64.exe
+

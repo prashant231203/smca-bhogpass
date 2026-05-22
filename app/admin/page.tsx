@@ -11,11 +11,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { getDb } from "@/lib/firebase";
 const db = getDb();
-import { collection, addDoc, getDocs, query, where, onSnapshot } from "firebase/firestore";
-import { Loader2, Plus, Calendar, Users, Mail, Phone, Users2, Download, Upload, FileSpreadsheet } from "lucide-react";
+import { collection, addDoc, getDocs, query, where, onSnapshot, doc, updateDoc } from "firebase/firestore";
+import { Loader2, Plus, Calendar, Users, Mail, Phone, Users2, Download, Upload, FileSpreadsheet, DownloadCloud } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { toast } from "sonner";
-import { Event, Coupon, Member } from "@/lib/types";
+import { Event, Coupon, Member, PreRegistration } from "@/lib/types";
 import * as xlsx from "xlsx";
 import { MemberTable } from "@/components/MemberTable";
 
@@ -27,6 +27,7 @@ export default function AdminPage() {
   const [eventDate, setEventDate] = useState("");
   const [eventTime, setEventTime] = useState("");
   const [eventNotes, setEventNotes] = useState("");
+  const [eventFoodMenu, setEventFoodMenu] = useState("");
   const [isCreatingEvent, setIsCreatingEvent] = useState(false);
   const [events, setEvents] = useState<(Event & { id: string })[]>([]);
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
@@ -49,10 +50,21 @@ export default function AdminPage() {
   // Bulk Upload State
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const foodFileInputRef = useRef<HTMLInputElement>(null);
+  const [isUploadingFood, setIsUploadingFood] = useState<string | null>(null); // Stores eventId being uploaded to
+
+  // Pre-Registration State
+  const [preRegistrations, setPreRegistrations] = useState<(PreRegistration & { id: string })[]>([]);
+  const [preRegName, setPreRegName] = useState("");
+  const [preRegPhone, setPreRegPhone] = useState("");
+  const [preRegQuantity, setPreRegQuantity] = useState<number>(1);
+  const [preRegEventId, setPreRegEventId] = useState("");
+  const [isAddingPreReg, setIsAddingPreReg] = useState(false);
 
   useEffect(() => {
     loadEvents();
     loadMembers();
+    loadPreRegistrations();
 
     // Setup live subscription for event stats (issued vs scanned)
     const unsubscribeCoupons = onSnapshot(collection(db!, "coupons"), (snapshot) => {
@@ -89,8 +101,15 @@ export default function AdminPage() {
        const q = query(collection(db!, "events"));
        const snapshot = await getDocs(q);
        const evts = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as (Event & {id: string})));
-       // Sort by date newest first
-       setEvents(evts.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
+       const sortedEvents = evts.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+       setEvents(sortedEvents);
+       
+       if (!selectedEventId) {
+         const activeEvent = sortedEvents.find(e => e.isActive);
+         if (activeEvent) {
+           setSelectedEventId(activeEvent.id);
+         }
+       }
     } catch(err) {
       console.error(err);
     }
@@ -102,6 +121,17 @@ export default function AdminPage() {
        const snapshot = await getDocs(q);
        const mems = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as (Member & {id: string})));
        setMembers(mems);
+    } catch(err) {
+      console.error(err);
+    }
+  };
+
+  const loadPreRegistrations = async () => {
+    try {
+       const q = query(collection(db!, "preRegistrations"));
+       const snapshot = await getDocs(q);
+       const preRegs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as (PreRegistration & {id: string})));
+       setPreRegistrations(preRegs.sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
     } catch(err) {
       console.error(err);
     }
@@ -121,104 +151,18 @@ export default function AdminPage() {
         hasTime: !!eventTime,
         isActive: true,
         createdBy: user.uid,
-        ...(eventNotes && { notes: eventNotes })
+        ...(eventNotes && { notes: eventNotes }),
+        ...(eventFoodMenu && { foodMenu: eventFoodMenu.split(",").map(i => i.trim()).filter(Boolean) })
       };
       
       const docRef = await addDoc(collection(db!, "events"), newEvent);
-      const newEventId = docRef.id;
-      toast.info("Event active! Generating designated QR passes...");
-      
-      const membersSnap = await getDocs(collection(db!, "members"));
-      let passCount = 0;
-      let emailCount = 0;
-
-      for (const memberDoc of membersSnap.docs) {
-         const member = memberDoc.data() as Member;
-         
-         const passesToIssue: string[] = [];
-         
-         if (member.primaryName) passesToIssue.push(member.primaryName + " (Primary)");
-         if (member.spouseName) passesToIssue.push(member.spouseName + " (Spouse)");
-         
-         if (member.childrenNames && Array.isArray(member.childrenNames)) {
-           member.childrenNames.forEach((childName, idx) => {
-             passesToIssue.push((childName || `Child ${idx + 1}`) + " (Child)");
-           });
-         } else {
-            // Backup in case data doesn't have exact names but has a count
-            const spouses = member.spouseName ? 1 : 0;
-            const cCount = member.familyCount > (1 + spouses) ? member.familyCount - (1 + spouses) : 0;
-            for(let i = 0; i < cCount; i++) passesToIssue.push(`Child ${i+1}`);
-         }
-
-         const passPromises = [];
-
-         for (const passHolder of passesToIssue) {
-           const couponData = {
-              eventId: newEventId,
-              memberId: memberDoc.id,
-              holderName: passHolder,
-              status: "issued",
-              source: "member",
-           };
-
-           const p = addDoc(collection(db!, "coupons"), couponData).then(ref => ({
-             id: ref.id,
-             label: passHolder,
-             url: `${window.location.origin}/pass/${ref.id}`
-           }));
-           passPromises.push(p);
-         }
-
-         const generatedPasses = await Promise.all(passPromises);
-         passCount += generatedPasses.length;
-
-         if (member.email) {
-            try {
-              const res = await fetch("/api/send-pass", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ 
-                  email: member.email, 
-                  name: member.primaryName, 
-                  passes: generatedPasses, 
-                  eventName: newEvent.name 
-                })
-              });
-              const resData = await res.json();
-              if (resData.success) {
-                emailCount++;
-              }
-            } catch (err) {
-               console.error("Failed to email pass to", member.email, err);
-            }
-         }
-         
-         if (member.whatsapp) {
-            try {
-              const res = await fetch("/api/send-whatsapp", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ 
-                  phone: member.whatsapp, 
-                  name: member.primaryName, 
-                  passes: generatedPasses, 
-                  eventName: newEvent.name 
-                })
-              });
-              await res.json();
-            } catch (err) {
-               console.error("Failed to send whatsapp pass to", member.whatsapp, err);
-            }
-         }
-      }
-      
-      toast.success(`Generated ${passCount} unique passes and sent ${emailCount} emails successfully!`);
+      toast.success("Event active! Awaiting pass generation via Food CSV or Pre-Registration.");
 
       setEventName("");
       setEventDate("");
       setEventTime("");
       setEventNotes("");
+      setEventFoodMenu("");
       loadEvents();
     } catch(err: unknown) {
       toast.error(err instanceof Error ? err.message : "Failed to create event");
@@ -314,6 +258,148 @@ export default function AdminPage() {
     xlsx.writeFile(wb, "SMCA_BulkMember_Template.xlsx");
   };
 
+  const handleFoodBulkUpload = async (e: React.ChangeEvent<HTMLInputElement>, eventId: string) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploadingFood(eventId);
+    try {
+      const reader = new FileReader();
+      reader.onload = async (event) => {
+        try {
+          const data = new Uint8Array(event.target?.result as ArrayBuffer);
+          const workbook = xlsx.read(data, { type: 'array' });
+          const firstSheetName = workbook.SheetNames[0];
+          const worksheet = workbook.Sheets[firstSheetName];
+          const rows = xlsx.utils.sheet_to_json<Record<string, any>>(worksheet, { defval: "" });
+
+          const activeEvent = events.find(e => e.id === eventId);
+          const eventName = activeEvent?.name || "Event";
+
+          let passesGeneratedCount = 0;
+          let messagesSentCount = 0;
+          let failureCount = 0;
+          
+          const ignoreHeaders = ['srl no', 'smca member name', 'phone number (mandatory)', 'phone', 'whatsapp', 'name', 'sno', 'sl no', 'phone number', 'contact'];
+
+          for (const row of rows) {
+            // Normalize headers to find name and phone easily
+            const normalizedRow = Object.keys(row).reduce((acc: any, key) => {
+                acc[key.toLowerCase().trim().replace(/ /g, '_')] = row[key];
+                return acc;
+            }, {});
+
+            const holderName = normalizedRow.smca_member_name || normalizedRow.name || normalizedRow.pass_holder;
+            let phoneNum = normalizedRow['phone_number_(mandatory)'] || normalizedRow.phone || normalizedRow.whatsapp || normalizedRow.contact || normalizedRow.phone_number;
+
+            if (!holderName || !phoneNum) {
+                failureCount++;
+                continue; 
+            }
+
+            const foodOrders: {item: string, quantity: number, claimed: number}[] = [];
+            
+            // Look for food columns
+            for (const key of Object.keys(row)) {
+                const lowerKey = key.toLowerCase().trim();
+                // Check if this key is in our ignore list (we ignore basic identity columns)
+                const isIgnored = ignoreHeaders.some(h => lowerKey === h || lowerKey.replace(/ /g, '_') === h.replace(/ /g, '_'));
+                if (isIgnored) continue;
+
+                const quantity = parseInt(row[key]);
+                if (isNaN(quantity) || quantity <= 0) continue;
+
+                foodOrders.push({
+                  item: key.trim(),
+                  quantity: quantity,
+                  claimed: 0
+                });
+            }
+
+            if (foodOrders.length > 0) {
+              const passPromises = [];
+              const couponData = {
+                eventId: eventId,
+                holderName: holderName.toString().trim(),
+                status: "issued",
+                source: "guest",
+                foodOrders: foodOrders
+              };
+
+              const p = addDoc(collection(db!, "coupons"), couponData).then(ref => ({
+                id: ref.id,
+                label: holderName.toString().trim() + " (Family Pass)",
+                url: `${window.location.origin}/pass/${ref.id}`
+              }));
+              passPromises.push(p);
+
+              const generatedPasses = await Promise.all(passPromises);
+              passesGeneratedCount += generatedPasses.length;
+
+              // Send WhatsApp
+              try {
+                const res = await fetch("/api/send-whatsapp", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ 
+                    phone: phoneNum.toString(), 
+                    name: holderName.toString(), 
+                    passes: generatedPasses, 
+                    eventName 
+                  })
+                });
+                if (res.ok) messagesSentCount++;
+              } catch (err) {
+                 console.error("Failed to send whatsapp pass to", phoneNum, err);
+              }
+            } else {
+              // Row had name and phone, but no valid food quantities
+              failureCount++;
+            }
+          }
+
+          toast.success(`Generated ${passesGeneratedCount} passes and sent ${messagesSentCount} WhatsApp messages! ${failureCount > 0 ? `(${failureCount} rows skipped)` : ""}`);
+        } catch (err: unknown) {
+          console.error("Food Upload Error:", err);
+          toast.error(`Failed to parse CSV: ${err instanceof Error ? err.message : "Ensure format."}`);
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    } catch (err) {
+      toast.error("Upload error");
+    } finally {
+      if (foodFileInputRef.current) foodFileInputRef.current.value = "";
+      setIsUploadingFood(null);
+    }
+  };
+
+  const exportAttendees = () => {
+    if (attendees.length === 0) {
+      toast.error("No attendees to export");
+      return;
+    }
+    try {
+      const activeEvent = events.find(e => e.id === selectedEventId);
+      const eventName = activeEvent ? activeEvent.name : "Event";
+      const exportData = attendees.map(a => ({
+        "Pass Holder": a.holderName,
+        "Source": a.source,
+        "Status": a.status,
+        "Scanned Time": a.scannedAt ? new Date(a.scannedAt).toLocaleString() : "Not Scanned",
+        "Food Assigned": a.foodItem || "None",
+        "Food Claimed": a.foodClaimed ? "Yes" : "No",
+        "Notes": a.notes || ""
+      }));
+      const ws = xlsx.utils.json_to_sheet(exportData);
+      const wb = xlsx.utils.book_new();
+      xlsx.utils.book_append_sheet(wb, ws, "Attendees");
+      xlsx.writeFile(wb, `SMCA_${eventName.replace(/\s+/g, '_')}_Report.xlsx`);
+      toast.success("Report downloaded!");
+    } catch (e) {
+      toast.error("Failed to export report");
+    }
+  };
+
   const handleBulkUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -388,6 +474,81 @@ export default function AdminPage() {
     }
   };
 
+  const handleAddPreRegistration = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!preRegName.trim() || !preRegEventId) return;
+    setIsAddingPreReg(true);
+    try {
+      const data: PreRegistration = {
+        name: preRegName.trim(),
+        phone: preRegPhone.trim(),
+        quantity: preRegQuantity,
+        eventId: preRegEventId,
+        status: "pending",
+        createdAt: new Date().toISOString()
+      };
+      await addDoc(collection(db!, "preRegistrations"), data);
+      toast.success("Pre-Registration added as Pending.");
+      setPreRegName("");
+      setPreRegPhone("");
+      setPreRegQuantity(1);
+      loadPreRegistrations();
+    } catch (e) {
+      toast.error("Failed to add pre-registration");
+    } finally {
+      setIsAddingPreReg(false);
+    }
+  };
+
+  const handleMarkPaid = async (pr: PreRegistration & {id: string}) => {
+    if (!confirm(`Mark ${pr.name}'s registration as paid and generate ${pr.quantity} passes?`)) return;
+    try {
+      // 1. Update status
+      await updateDoc(doc(db!, "preRegistrations", pr.id), { status: "paid" });
+
+      // 2. Generate passes
+      const activeEvent = events.find(e => e.id === pr.eventId);
+      const eventName = activeEvent?.name || "Event";
+      
+      const passPromises = [];
+      const couponData = {
+        eventId: pr.eventId,
+        holderName: pr.name + " (Pre-Registered Family)",
+        status: "issued",
+        source: "guest",
+        notes: "Pre-Registered",
+        foodOrders: [{
+            item: "Entry Pass",
+            quantity: pr.quantity,
+            claimed: 0
+        }]
+      };
+
+      const p = addDoc(collection(db!, "coupons"), couponData).then(ref => ({
+        id: ref.id,
+        label: pr.name + " (Family Pass)",
+        url: `${window.location.origin}/pass/${ref.id}`
+      }));
+      passPromises.push(p);
+
+      const generatedPasses = await Promise.all(passPromises);
+
+      // 3. Send WhatsApp
+      if (pr.phone.trim()) {
+        fetch("/api/send-whatsapp", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ phone: pr.phone.trim(), name: pr.name.trim(), passes: generatedPasses, eventName })
+        }).catch(console.error);
+      }
+
+      toast.success(`Generated ${generatedPasses.length} passes and sent WhatsApp!`);
+      loadPreRegistrations();
+    } catch (e) {
+       toast.error("Failed to process payment");
+    }
+  };
+
   if (!roleData || roleData.role !== "admin") {
     return <div className="p-4 text-center text-zinc-500 min-h-screen flex items-center justify-center">Access Denied.</div>;
   }
@@ -398,9 +559,10 @@ export default function AdminPage() {
       
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
         <Tabs defaultValue="events" className="w-full">
-          <TabsList className="grid w-full grid-cols-2 mb-8 bg-zinc-200/50 p-1">
+          <TabsList className="grid w-full grid-cols-3 mb-8 bg-zinc-200/50 p-1">
             <TabsTrigger value="events" className="rounded-md">Events & Scans</TabsTrigger>
             <TabsTrigger value="members" className="rounded-md">Members Directory</TabsTrigger>
+            <TabsTrigger value="prereg" className="rounded-md">Pre-Registrations</TabsTrigger>
           </TabsList>
           
           <TabsContent value="events" className="space-y-6">
@@ -459,6 +621,16 @@ export default function AdminPage() {
                       className="bg-zinc-50/50 resize-none"
                     />
                   </div>
+                  <div className="space-y-2">
+                     <Label htmlFor="eventFoodMenu" className="font-semibold text-zinc-700">Food Menu / Categories <span className="font-normal text-zinc-400">(Opt)</span></Label>
+                    <Input 
+                      id="eventFoodMenu" 
+                      value={eventFoodMenu}
+                      onChange={(e) => setEventFoodMenu(e.target.value)}
+                      placeholder="e.g. Veg Thali, Jain Thali, VIP Meal"
+                      className="bg-zinc-50/50"
+                    />
+                  </div>
                   <Button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 h-12 text-md rounded-xl" disabled={isCreatingEvent}>
                     {isCreatingEvent ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : <Plus className="w-5 h-5 mr-2" />}
                     Ignite Event Engine
@@ -504,22 +676,51 @@ export default function AdminPage() {
                            </div>
                         </div>
 
-                        <CardContent className="pl-6 pt-3 pb-5">
-                          <Button variant="secondary" size="sm" onClick={() => setSelectedEventId(evt.id)} className="w-full rounded-lg bg-zinc-100 hover:bg-zinc-200 text-zinc-700 font-semibold shadow-none border border-zinc-200">
+                        <CardContent className="px-6 pt-3 pb-5 flex flex-col sm:flex-row gap-3">
+                          <Button variant="secondary" size="sm" onClick={() => setSelectedEventId(evt.id)} className="w-full sm:w-1/2 rounded-lg bg-zinc-100 hover:bg-zinc-200 text-zinc-700 font-semibold shadow-none border border-zinc-200">
                             <Users className="w-4 h-4 mr-2 text-zinc-500" /> View Live Feed
                           </Button>
+                          <div className="w-full sm:w-1/2 relative">
+                            <Button variant="outline" size="sm" className="w-full rounded-lg text-emerald-700 border-emerald-200 hover:bg-emerald-50 bg-white" disabled={isUploadingFood === evt.id} onClick={() => {
+                               // A small hack: we attach the current eventId to a data attribute on the ref so the onChange handler knows which event to use
+                               if (foodFileInputRef.current) {
+                                  foodFileInputRef.current.dataset.eventId = evt.id;
+                                  foodFileInputRef.current.click();
+                               }
+                            }}>
+                              {isUploadingFood === evt.id ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Upload className="w-4 h-4 mr-2" />} Food CSV
+                            </Button>
+                          </div>
                         </CardContent>
                       </Card>
                      );
                    })}
+                   <input 
+                     type="file" 
+                     accept=".csv,.xlsx" 
+                     className="hidden" 
+                     ref={foodFileInputRef} 
+                     onChange={(e) => {
+                       if (foodFileInputRef.current?.dataset.eventId) {
+                          handleFoodBulkUpload(e, foodFileInputRef.current.dataset.eventId);
+                       }
+                     }} 
+                   />
                  </div>
               )}
 
               {selectedEventId && (
                 <Card className="mt-8 border-0 shadow-md ring-1 ring-zinc-200 rounded-2xl overflow-hidden">
                   <CardHeader className="bg-zinc-100/50 border-b border-zinc-100 pb-4 pt-6">
-                    <CardTitle className="text-lg">Live Scanner Feed</CardTitle>
-                    <CardDescription>Instantaneous updates from the gate.</CardDescription>
+                    <div className="flex justify-between items-start sm:items-center flex-col sm:flex-row gap-3">
+                      <div>
+                        <CardTitle className="text-lg">Live Scanner Feed</CardTitle>
+                        <CardDescription>Instantaneous updates from the gate.</CardDescription>
+                      </div>
+                      <Button variant="outline" size="sm" onClick={exportAttendees} className="bg-white border-zinc-200 text-zinc-700 hover:bg-zinc-50 shadow-sm shrink-0">
+                        <DownloadCloud className="w-4 h-4 mr-2 text-indigo-500" /> Export Event Report
+                      </Button>
+                    </div>
                   </CardHeader>
                   <CardContent className="p-0 max-h-[400px] overflow-y-auto">
                     {loadingAttendees ? (
@@ -530,26 +731,31 @@ export default function AdminPage() {
                       <div className="text-center py-12 text-zinc-500 font-medium">Nobody has arrived yet.</div>
                     ) : (
                       <div className="divide-y divide-zinc-100">
-                        {attendees.map((attendee) => (
-                          <div key={attendee.id} className="p-4 sm:px-6 flex items-start sm:items-center justify-between hover:bg-zinc-50 transition-colors">
+                        {attendees.map((attendee) => {
+                          const isRecent = attendee.scannedAt && (new Date().getTime() - new Date(attendee.scannedAt).getTime() < 120000);
+                          return (
+                          <div key={attendee.id} className={`p-4 sm:px-6 flex items-start sm:items-center justify-between transition-colors ${isRecent ? 'bg-emerald-50 hover:bg-emerald-100/80' : 'hover:bg-zinc-50'}`}>
                             <div className="flex flex-col">
-                              <p className="font-bold text-zinc-900">{attendee.holderName}</p>
+                              <p className="font-bold text-zinc-900 flex items-center gap-2">
+                                {attendee.holderName}
+                                {isRecent && <span className="flex h-2 w-2 relative"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span><span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span></span>}
+                              </p>
                               <div className="flex items-center mt-1 space-x-2">
-                                <span className="inline-flex px-1.5 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider bg-zinc-100 text-zinc-600 border border-zinc-200">
+                                <span className={`inline-flex px-1.5 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider border ${isRecent ? 'bg-emerald-100 text-emerald-700 border-emerald-200' : 'bg-zinc-100 text-zinc-600 border-zinc-200'}`}>
                                    {attendee.source}
                                 </span>
-                                <span className="text-xs font-medium text-zinc-400">
+                                <span className="text-xs font-medium text-zinc-500">
                                   {new Date(attendee.scannedAt || "").toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                                 </span>
                               </div>
                             </div>
                             {attendee.notes && (
-                              <div className="text-xs font-medium text-zinc-500 max-w-[140px] sm:max-w-[200px] text-right bg-zinc-50 p-2 rounded-lg border border-zinc-100">
+                              <div className="text-xs font-medium text-zinc-500 max-w-[140px] sm:max-w-[200px] text-right bg-white p-2 rounded-lg border border-zinc-200 shadow-sm">
                                 {attendee.notes}
                               </div>
                             )}
                           </div>
-                        ))}
+                        )})}
                       </div>
                     )}
                   </CardContent>
@@ -722,6 +928,124 @@ export default function AdminPage() {
               ) : (
                  <MemberTable data={members} onRefresh={loadMembers} />
               )}
+            </div>
+          </TabsContent>
+
+          <TabsContent value="prereg" className="space-y-6">
+            <Card className="border-0 shadow-sm ring-1 ring-zinc-200 overflow-hidden rounded-2xl">
+              <div className="bg-gradient-to-r from-amber-500 to-amber-600 h-2 w-full"></div>
+              <CardHeader className="pt-6 sm:px-8">
+                <CardTitle className="text-xl">Add Pending Pre-Registration</CardTitle>
+                <CardDescription>
+                  Register someone who hasn't paid yet. Passes will NOT be generated until marked paid.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="sm:px-8 pb-8">
+                <form onSubmit={handleAddPreRegistration} className="space-y-5">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                     <div className="space-y-2">
+                       <Label className="font-semibold text-zinc-700">Event</Label>
+                       <Select value={preRegEventId} onValueChange={(v) => setPreRegEventId(v || "")}>
+                         <SelectTrigger className="bg-zinc-50/50">
+                           <SelectValue placeholder="Select Event" />
+                         </SelectTrigger>
+                         <SelectContent>
+                           {events.map(e => (
+                             <SelectItem key={e.id} value={e.id}>{e.name} ({e.date})</SelectItem>
+                           ))}
+                         </SelectContent>
+                       </Select>
+                     </div>
+                     <div className="space-y-2">
+                       <Label className="font-semibold text-zinc-700">Guest Name</Label>
+                       <Input 
+                         value={preRegName}
+                         onChange={(e) => setPreRegName(e.target.value)}
+                         placeholder="e.g. Anil Kumar"
+                         required
+                         className="bg-zinc-50/50"
+                       />
+                     </div>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                     <div className="space-y-2">
+                       <Label className="font-semibold text-zinc-700">WhatsApp No.</Label>
+                       <Input 
+                         value={preRegPhone}
+                         onChange={(e) => setPreRegPhone(e.target.value)}
+                         placeholder="919876543210"
+                         required
+                         className="bg-zinc-50/50"
+                       />
+                     </div>
+                     <div className="space-y-2">
+                       <Label className="font-semibold text-zinc-700">Passes Required</Label>
+                       <Input 
+                         type="number"
+                         min="1"
+                         max="20"
+                         value={preRegQuantity.toString()}
+                         onChange={(e) => setPreRegQuantity(parseInt(e.target.value) || 1)}
+                         className="bg-zinc-50/50"
+                       />
+                     </div>
+                  </div>
+                  <Button type="submit" className="w-full bg-amber-600 hover:bg-amber-700 h-12 text-md rounded-xl" disabled={isAddingPreReg || !preRegEventId}>
+                    {isAddingPreReg ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : <Plus className="w-5 h-5 mr-2" />}
+                    Add as Pending
+                  </Button>
+                </form>
+              </CardContent>
+            </Card>
+
+            <div className="space-y-4 pt-4">
+               <h2 className="text-xl font-bold tracking-tight text-zinc-900 px-1">Pending Pre-Registrations</h2>
+               {preRegistrations.filter(p => p.status === 'pending').length === 0 ? (
+                 <div className="p-8 text-center bg-white border border-dashed border-zinc-200 rounded-2xl text-zinc-500 font-medium">
+                   No pending registrations.
+                 </div>
+               ) : (
+                 <div className="grid gap-3">
+                   {preRegistrations.filter(p => p.status === 'pending').map(pr => {
+                     const evt = events.find(e => e.id === pr.eventId);
+                     return (
+                       <div key={pr.id} className="p-4 bg-white border border-zinc-200 rounded-xl flex items-center justify-between shadow-sm">
+                         <div>
+                           <h3 className="font-bold text-zinc-900">{pr.name} <span className="text-xs font-medium bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full ml-2">Pending</span></h3>
+                           <p className="text-sm text-zinc-500 mt-1">{pr.quantity} Passes • {evt?.name}</p>
+                           <p className="text-xs text-zinc-400 mt-0.5">{pr.phone}</p>
+                         </div>
+                         <Button onClick={() => handleMarkPaid(pr)} className="bg-emerald-600 hover:bg-emerald-700 text-white shrink-0">
+                           Mark Paid & Send QRs
+                         </Button>
+                       </div>
+                     );
+                   })}
+                 </div>
+               )}
+            </div>
+
+            <div className="space-y-4 pt-4">
+               <h2 className="text-xl font-bold tracking-tight text-zinc-900 px-1">Paid Pre-Registrations</h2>
+               {preRegistrations.filter(p => p.status === 'paid').length === 0 ? (
+                 <div className="p-8 text-center bg-white border border-dashed border-zinc-200 rounded-2xl text-zinc-500 font-medium">
+                   No paid registrations yet.
+                 </div>
+               ) : (
+                 <div className="grid gap-3">
+                   {preRegistrations.filter(p => p.status === 'paid').map(pr => {
+                     const evt = events.find(e => e.id === pr.eventId);
+                     return (
+                       <div key={pr.id} className="p-4 bg-zinc-50 border border-zinc-200 rounded-xl flex items-center justify-between shadow-sm">
+                         <div>
+                           <h3 className="font-bold text-zinc-900">{pr.name} <span className="text-xs font-medium bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full ml-2">Paid & QRs Sent</span></h3>
+                           <p className="text-sm text-zinc-500 mt-1">{pr.quantity} Passes • {evt?.name}</p>
+                         </div>
+                       </div>
+                     );
+                   })}
+                 </div>
+               )}
             </div>
           </TabsContent>
         </Tabs>

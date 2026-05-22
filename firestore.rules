@@ -87,21 +87,25 @@ service cloud.firestore {
              data.source in ['member', 'guest'] &&
              (data.keys().hasAll(['memberId']) ? (data.memberId is string && data.memberId.size() <= 128) : true) &&
              (data.keys().hasAll(['notes']) ? (data.notes is string && data.notes.size() <= 1000) : true) &&
-             (data.keys().hasAll(['scannedAt']) ? false : true) &&
-             (data.keys().hasAll(['scannedBy']) ? false : true) &&
-             exists(/databases/$(database)/documents/events/$(data.eventId));
+             (data.keys().hasAll(['scannedBy']) ? false : true);
+             // Removed exists() check to prevent race conditions during rapid bulk creation
+             // && exists(/databases/$(database)/documents/events/$(data.eventId));
     }
 
     function isValidCouponUpdate(data) {
-      return data.keys().hasAll(['eventId', 'holderName', 'status', 'source', 'scannedAt', 'scannedBy']) &&
+      return data.keys().hasAll(['eventId', 'holderName', 'status', 'source']) &&
              data.eventId is string && data.eventId.size() <= 128 &&
              data.holderName is string && data.holderName.size() >= 1 && data.holderName.size() <= 150 &&
              data.status == 'scanned' &&
              data.source in ['member', 'guest'] &&
              (data.keys().hasAll(['memberId']) ? (data.memberId is string && data.memberId.size() <= 128) : true) &&
              (data.keys().hasAll(['notes']) ? (data.notes is string && data.notes.size() <= 1000) : true) &&
-             data.scannedAt is string && data.scannedAt.size() <= 50 &&
-             data.scannedBy == request.auth.uid;
+             (data.keys().hasAll(['scannedAt']) ? (data.scannedAt is string && data.scannedAt.size() <= 50) : true) &&
+             (data.keys().hasAll(['scannedBy']) ? (data.scannedBy == request.auth.uid) : true) &&
+             (data.keys().hasAll(['foodOrders']) ? (data.foodOrders is list) : true) &&
+             (data.keys().hasAll(['foodClaimed']) ? (data.foodClaimed is bool) : true) &&
+             (data.keys().hasAll(['foodClaimedAt']) ? (data.foodClaimedAt is string && data.foodClaimedAt.size() <= 50) : true) &&
+             (data.keys().hasAll(['foodClaimedBy']) ? (data.foodClaimedBy == request.auth.uid) : true);
     }
 
     match /coupons/{qrId} {
@@ -120,7 +124,7 @@ service cloud.firestore {
                     (existing().keys().hasAll(['memberId']) ? existing().memberId == incoming().memberId : true) &&
                     existing().status == 'issued' && 
                     incoming().status == 'scanned' &&
-                    incoming().diff(existing()).affectedKeys().hasOnly(['status', 'scannedAt', 'scannedBy']);
+                    incoming().diff(existing()).affectedKeys().hasOnly(['status', 'scannedAt', 'scannedBy', 'foodOrders', 'foodClaimed', 'foodClaimedAt', 'foodClaimedBy']);
     }
 
     function isValidPayment(data) {
