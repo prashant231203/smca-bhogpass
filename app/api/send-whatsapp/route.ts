@@ -29,57 +29,28 @@ export async function POST(req: Request) {
         .map((p: Record<string, string>) => `👉 ${p.label}: ${p.url}`)
         .join('\n');
 
-      // Send the approved Meta Utility Template 'bhogpass'
-      // This bypasses the 24-hour customer service window constraint!
-      const tryLanguages = ['en', 'en_US', 'en_GB', 'en_IN'];
-      let response;
-      let data;
-
-      for (const lang of tryLanguages) {
-        response = await fetch(`https://graph.facebook.com/v18.0/${phoneNumberId}/messages`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            messaging_product: 'whatsapp',
-            to: formattedPhone,
-            type: 'template',
-            template: {
-              name: 'bhogpass',
-              language: {
-                code: lang
-              },
-              components: [
-                {
-                  type: 'body',
-                  parameters: [
-                    { type: 'text', text: name },
-                    { type: 'text', text: eventName },
-                    { type: 'text', text: passesListString }
-                  ]
-                }
-              ]
+      const response = await fetch(`https://graph.facebook.com/v18.0/${phoneNumberId}/messages`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          messaging_product: 'whatsapp',
+          to: formattedPhone,
+          type: 'template',
+          template: {
+            name: 'bhogpass',
+            language: {
+              code: 'en'
             }
-          })
-        });
-        
-        data = await response.json();
-        
-        if (response.ok) {
-          break;
-        }
-        
-        // If the error is NOT "Template name does not exist in the translation" (132001), 
-        // there is no point trying other languages.
-        if (data.error?.code !== 132001) {
-          break;
-        }
-        console.warn(`[WhatsApp] Template not found in locale: ${lang}, trying next...`);
-      }
+          }
+        })
+      });
+      
+      const data = await response.json();
 
-      if (!response || !response.ok) {
+      if (!response.ok) {
         console.error("Meta API error (template message):", data);
         throw new Error(data?.error?.message || "Failed to send Meta WhatsApp template message");
       }
