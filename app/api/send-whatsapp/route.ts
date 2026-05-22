@@ -28,45 +28,46 @@ export async function POST(req: Request) {
         .map((value) => value.trim())
         .filter(Boolean);
       let response: Response | undefined;
-      let data: any;
+      let data: unknown;
 
       for (const templateName of templateNames) {
         for (const lang of tryLanguages) {
-        response = await fetch(`https://graph.facebook.com/v18.0/${phoneNumberId}/messages`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            messaging_product: 'whatsapp',
-            to: formattedPhone,
-            type: 'template',
-            template: {
-              name: templateName,
-              language: {
-                code: lang
+          response = await fetch(`https://graph.facebook.com/v18.0/${phoneNumberId}/messages`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              messaging_product: 'whatsapp',
+              to: formattedPhone,
+              type: 'template',
+              template: {
+                name: templateName,
+                language: {
+                  code: lang
+                }
               }
-            }
-          })
-        });
+            })
+          });
 
-        data = await response.json();
+          data = await response.json();
+          const metaError = (data as { error?: { code?: number; message?: string } } | null)?.error;
 
-        if (response.ok) {
-          console.log(`[WhatsApp Meta Template] Sent to ${formattedPhone}: ${passes.length} passes for ${eventName} using ${templateName}/${lang}`);
-          return NextResponse.json({ success: true, data });
-        }
+          if (response.ok) {
+            console.log(`[WhatsApp Meta Template] Sent to ${formattedPhone}: ${passes.length} passes for ${eventName} using ${templateName}/${lang}`);
+            return NextResponse.json({ success: true, data });
+          }
 
-        if (data?.error?.code !== 132001) {
-          break;
-        }
+          if (metaError?.code !== 132001) {
+            break;
+          }
 
-        console.warn(`[WhatsApp] Template ${templateName} not found in locale: ${lang}, trying next...`);
+          console.warn(`[WhatsApp] Template ${templateName} not found in locale: ${lang}, trying next...`);
         }
       }
 
-      if (data?.error?.code === 132001) {
+      if ((data as { error?: { code?: number } } | null)?.error?.code === 132001) {
         const attemptedTemplates = templateNames.join(', ');
         const attemptedLocales = tryLanguages.join(', ');
         console.error(`[WhatsApp] No approved template translation found. Attempted templates: ${attemptedTemplates}. Attempted locales: ${attemptedLocales}.`);
@@ -81,7 +82,7 @@ export async function POST(req: Request) {
       }
 
       console.error("Meta API error (template message):", data);
-      throw new Error(data?.error?.message || "Failed to send Meta WhatsApp template message");
+      throw new Error((data as { error?: { message?: string } } | null)?.error?.message || "Failed to send Meta WhatsApp template message");
     } else {
       // For now, we simulate success if keys aren't configured so the application logic completes without crashing
       console.log(`[WhatsApp Simulated Template] To ${formattedPhone}: ${passes.length} passes for ${eventName} (Meta keys not set)`);
