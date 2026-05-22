@@ -8,6 +8,10 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, error: "No phone number provided" }, { status: 400 });
     }
 
+    if (!Array.isArray(passes) || passes.length === 0) {
+      return NextResponse.json({ success: false, error: "No passes provided" }, { status: 400 });
+    }
+
     // Integration with Meta WhatsApp Cloud API
     const token = process.env.META_WHATSAPP_TOKEN;
     const phoneNumberId = process.env.META_PHONE_NUMBER_ID;
@@ -29,6 +33,7 @@ export async function POST(req: Request) {
         .filter(Boolean);
       let response: Response | undefined;
       let data: unknown;
+      let sawTemplateMissingError = false;
 
       for (const templateName of templateNames) {
         for (const lang of tryLanguages) {
@@ -63,19 +68,22 @@ export async function POST(req: Request) {
             break;
           }
 
+          sawTemplateMissingError = true;
+
           console.warn(`[WhatsApp] Template ${templateName} not found in locale: ${lang}, trying next...`);
         }
       }
 
-      if ((data as { error?: { code?: number } } | null)?.error?.code === 132001) {
+      if (sawTemplateMissingError) {
         const attemptedTemplates = templateNames.join(', ');
         const attemptedLocales = tryLanguages.join(', ');
+        const metaDetails = (data as { error?: { error_data?: { details?: string } } } | null)?.error?.error_data?.details;
         console.error(`[WhatsApp] No approved template translation found. Attempted templates: ${attemptedTemplates}. Attempted locales: ${attemptedLocales}.`);
         return NextResponse.json(
           {
             success: false,
             error: 'No approved WhatsApp template translation found',
-            details: { attemptedTemplates: templateNames, attemptedLocales: tryLanguages }
+            details: { attemptedTemplates: templateNames, attemptedLocales: tryLanguages, metaDetails }
           },
           { status: 422 }
         );
