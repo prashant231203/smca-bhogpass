@@ -9,17 +9,7 @@ export async function GET() {
   }
 
   try {
-    // 1. Get WABA ID from Phone ID
-    const wabaRes = await fetch(`https://graph.facebook.com/v18.0/${phoneId}?fields=whatsapp_business_account`, {
-      headers: { Authorization: `Bearer ${token}` }
-    });
-    const wabaData = await wabaRes.json();
-    
-    if (!wabaData.whatsapp_business_account) {
-      return NextResponse.json({ error: "Could not find WABA ID", data: wabaData });
-    }
-    
-    const wabaId = wabaData.whatsapp_business_account.id;
+    const wabaId = "840325311996734";
 
     // 2. Get Templates
     const tplRes = await fetch(`https://graph.facebook.com/v18.0/${wabaId}/message_templates?limit=100`, {
