@@ -27,7 +27,7 @@ export async function POST(req: Request) {
         .map((p: Record<string, string>) => `👉 ${p.label}: ${p.url}`)
         .join('\n');
 
-      const templateName = process.env.META_WHATSAPP_PASSES_TEMPLATE_NAME || 'bhogpass_delivery';
+      const templateName = process.env.META_WHATSAPP_PASSES_TEMPLATE_NAME || 'bhogpass';
       const tryLanguages = ['en', 'en_US', 'en_GB', 'en_IN'];
       let response: Response | undefined;
       let data: any;
@@ -47,7 +47,17 @@ export async function POST(req: Request) {
               name: templateName,
               language: {
                 code: lang
-              }
+              },
+              components: [
+                {
+                  type: 'body',
+                  parameters: [
+                    { type: 'text', text: name },
+                    { type: 'text', text: eventName },
+                    { type: 'text', text: passesListString }
+                  ]
+                }
+              ]
             }
           })
         });
