@@ -38,10 +38,8 @@ export function ScannerComponent() {
     }
     
     try {
-      // Pause camera scanning immediately during processing and success/fail display
-      if (html5QrCode.current?.isScanning) {
-        html5QrCode.current.pause();
-      }
+      // We removed the pause() call here to prevent html5-qrcode state transition crashes.
+      // The isProcessingRef flag ensures we ignore incoming frames while processing.
 
       // Extract ID if the QR code is a full URL (e.g. https://.../pass/abcd)
       let couponId = qrText;
@@ -118,9 +116,7 @@ export function ScannerComponent() {
     setScanResult(null);
     setIsProcessing(false);
     isProcessingRef.current = false;
-    if (html5QrCode.current && html5QrCode.current.getState() === 2 /* PAUSED */) {
-      html5QrCode.current.resume();
-    }
+    // We no longer pause/resume the camera, just reset the processing flags
   }, []);
 
   // Handle automatic timeout for scanner reset
@@ -135,12 +131,17 @@ export function ScannerComponent() {
     return () => clearTimeout(timer);
   }, [scanResult, resetScanner]);
 
+  // Keep a fresh reference to processScan to avoid scanner restart loops
+  const processScanRef = useRef(processScan);
+  useEffect(() => {
+    processScanRef.current = processScan;
+  }, [processScan]);
+
   useEffect(() => {
     if (!readerRef.current) return;
     
-    if (html5QrCode.current && html5QrCode.current.isScanning) {
-       html5QrCode.current.stop().catch(() => {});
-    }
+    // Only initialize once to prevent race conditions
+    if (html5QrCode.current) return;
 
     html5QrCode.current = new Html5Qrcode("reader", { 
        formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE],
@@ -149,8 +150,6 @@ export function ScannerComponent() {
 
     const startScanner = async () => {
       try {
-        if (html5QrCode.current?.isScanning) return;
-        
         if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
            await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
         }
@@ -158,7 +157,7 @@ export function ScannerComponent() {
         await html5QrCode.current?.start(
           { facingMode: "environment" },
           { fps: 10, qrbox: { width: 250, height: 250 } },
-          (decodedText) => { processScan(decodedText); },
+          (decodedText) => { processScanRef.current(decodedText); },
           () => {}
         );
       } catch (err: any) {
@@ -175,10 +174,13 @@ export function ScannerComponent() {
 
     return () => {
       if (html5QrCode.current?.isScanning) {
-        html5QrCode.current.stop().then(() => html5QrCode.current?.clear()).catch(() => {});
+        html5QrCode.current.stop().then(() => {
+          html5QrCode.current?.clear();
+          html5QrCode.current = null;
+        }).catch(() => {});
       }
     };
-  }, [processScan]);
+  }, []);
 
   return (
     <div className="relative">
