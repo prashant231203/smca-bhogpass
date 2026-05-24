@@ -46,30 +46,42 @@ export default function ScannerPage() {
 
       const activeEventId = activeEvents.docs[0].id;
 
-      const passesToIssue = [guestName.trim() + " (Primary Guest)"];
+      let totalGuests = 1;
+      let familyDetails = [guestName.trim() + " (Primary)"];
+      
       if (guestSpouse.trim()) {
-        passesToIssue.push(guestSpouse.trim() + " (Guest Spouse)");
+        totalGuests++;
+        familyDetails.push(guestSpouse.trim() + " (Spouse)");
       }
-      for (let i = 0; i < guestChildren; i++) {
-        passesToIssue.push(`Guest Child ${i + 1}`);
+      if (guestChildren > 0) {
+        totalGuests += guestChildren;
+        familyDetails.push(`${guestChildren} Child(ren)`);
       }
 
-      const passPromises = passesToIssue.map(holder => {
-        const couponData = {
-          eventId: activeEventId,
-          holderName: holder,
-          status: "issued",
-          source: "guest",
-          ...(guestNotes && { notes: guestNotes })
-        };
-        return addDoc(collection(db!, "coupons"), couponData).then(ref => ({
-          id: ref.id,
-          label: holder,
-          url: `${window.location.origin}/pass/${ref.id}`
-        }));
-      });
+      const notes = guestNotes 
+        ? `${guestNotes} | Family: ${familyDetails.join(', ')}` 
+        : `Family: ${familyDetails.join(', ')}`;
 
-      const generatedPasses = await Promise.all(passPromises);
+      const couponData = {
+        eventId: activeEventId,
+        holderName: guestName.trim() + " (Family Pass)",
+        status: "issued",
+        source: "guest",
+        notes: notes,
+        foodOrders: [{
+            item: "Entry Pass",
+            quantity: totalGuests,
+            claimed: 0
+        }]
+      };
+
+      const ref = await addDoc(collection(db!, "coupons"), couponData);
+      const generatedPasses = [{
+        id: ref.id,
+        label: guestName.trim() + " (Family Pass)",
+        url: `${window.location.origin}/pass/${ref.id}`
+      }];
+
       const eventName = activeEvents.docs[0].data().name || "Event";
 
       if (guestEmail.trim()) {
