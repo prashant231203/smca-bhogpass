@@ -27,10 +27,15 @@ export async function POST(req: Request) {
         .map((p: Record<string, string>) => `👉 ${p.label}: ${p.url}`)
         .join('\n');
 
-      const templateName = process.env.META_WHATSAPP_PASSES_TEMPLATE_NAME || 'bhog_mkt';
-      const tryLanguages = ['en', 'en_US', 'en_GB', 'en_IN'];
+      const templateName = process.env.META_WHATSAPP_PASSES_TEMPLATE_NAME || 'bhogappointment';
+      const tryLanguages = ['en_US', 'en', 'en_GB', 'en_IN']; // prioritized en_US based on user request
       let response: Response | undefined;
       let data: any;
+      
+      // Extract the dynamic part of the URL for the button (assuming base URL is set in Meta)
+      // e.g. from https://smca-bhogpass.vercel.app/pass/123 -> 123
+      const firstPassUrl = passes[0]?.url || "";
+      const passId = firstPassUrl.split('/').pop() || "";
 
       for (const lang of tryLanguages) {
         response = await fetch(`https://graph.facebook.com/v18.0/${phoneNumberId}/messages`, {
@@ -52,9 +57,19 @@ export async function POST(req: Request) {
                 {
                   type: 'body',
                   parameters: [
-                    { type: 'text', text: name },
-                    { type: 'text', text: eventName },
-                    { type: 'text', text: passesListString }
+                    { type: 'text', text: name }, // {{1}} Name
+                    { type: 'text', text: "SMCA" }, // {{2}} Business Name
+                    { type: 'text', text: "Bhog Pass" }, // {{3}} Appointment for
+                    { type: 'text', text: eventName }, // {{4}} Date/Event
+                    { type: 'text', text: "Event Time" } // {{5}} Time
+                  ]
+                },
+                {
+                  type: 'button',
+                  sub_type: 'url',
+                  index: '0',
+                  parameters: [
+                    { type: 'text', text: passId } // The dynamic suffix for the URL button
                   ]
                 }
               ]
