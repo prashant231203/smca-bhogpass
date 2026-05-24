@@ -119,13 +119,6 @@ export default function AdminPage() {
        const evts = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as (Event & {id: string})));
        const sortedEvents = evts.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
        setEvents(sortedEvents);
-       
-       if (!selectedEventId) {
-         const activeEvent = sortedEvents.find(e => e.isActive);
-         if (activeEvent) {
-           setSelectedEventId(activeEvent.id);
-         }
-       }
     } catch(err) {
       console.error(err);
     }

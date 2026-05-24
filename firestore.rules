@@ -73,7 +73,7 @@ service cloud.firestore {
     }
 
     match /events/{eventId} {
-      allow get: if isSignedIn(); // All roles might need to read an event
+      allow get: if true; // All users (even guests with a pass link) can read an event
       allow list: if isSignedIn();
       allow create: if isAdmin() && isValidId(eventId) && isValidEvent(incoming());
       allow update: if isAdmin() && isValidId(eventId) && isValidEventUpdate(incoming());
