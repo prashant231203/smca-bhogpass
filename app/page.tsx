@@ -2,14 +2,17 @@
 
 import { useAuth } from "@/components/AuthProvider";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Loader2, Ticket, QrCode, Building2 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
 export default function Home() {
-  const { user, roleData, loading, login, logout } = useAuth();
+  const { user, roleData, loading, login, loginWithEmail, logout } = useAuth();
   const router = useRouter();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
 
   useEffect(() => {
     if (!loading && roleData) {
@@ -51,7 +54,36 @@ export default function Home() {
           <CardContent className="space-y-6 px-8 pb-10">
             {!user ? (
               <div className="space-y-4 mt-4">
-                <Button onClick={login} className="w-full h-14 text-lg font-bold bg-zinc-900 hover:bg-zinc-800 text-white rounded-xl shadow-md transition-all active:scale-[0.98] flex items-center justify-center gap-3">
+                <form onSubmit={(e) => { e.preventDefault(); loginWithEmail(email, password); }} className="space-y-3 mb-4">
+                  <Input 
+                    type="email" 
+                    placeholder="Admin Email" 
+                    value={email} 
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="bg-zinc-50 border-zinc-200"
+                    required
+                  />
+                  <Input 
+                    type="password" 
+                    placeholder="Password" 
+                    value={password} 
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="bg-zinc-50 border-zinc-200"
+                    required
+                  />
+                  <Button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm h-12 rounded-xl font-bold">
+                    Sign in with Email
+                  </Button>
+                </form>
+
+                <div className="relative flex items-center justify-center text-xs uppercase my-6">
+                  <div className="absolute inset-0 flex items-center">
+                    <div className="w-full border-t border-zinc-200"></div>
+                  </div>
+                  <span className="relative bg-white px-2 text-zinc-500 font-bold">Or</span>
+                </div>
+
+                <Button onClick={login} className="w-full h-12 text-base font-bold bg-zinc-900 hover:bg-zinc-800 text-white rounded-xl shadow-md transition-all active:scale-[0.98] flex items-center justify-center gap-3">
                   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="w-5 h-5 flex-shrink-0">
                     <path fill="currentColor" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
                     <path fill="currentColor" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />

@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext, useEffect, useState } from "react";
-import { onAuthStateChanged, User as FirebaseUser, signInWithPopup, GoogleAuthProvider, signOut } from "firebase/auth";
+import { onAuthStateChanged, User as FirebaseUser, signInWithPopup, GoogleAuthProvider, signOut, signInWithEmailAndPassword } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import { getDb, auth } from "@/lib/firebase";
 const db = getDb();
@@ -14,6 +14,7 @@ interface AuthContextType {
   roleData: User | null;
   loading: boolean;
   login: () => Promise<void>;
+  loginWithEmail: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -66,6 +67,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const loginWithEmail = async (email: string, pass: string) => {
+    try {
+      setLoading(true);
+      await signInWithEmailAndPassword(auth, email, pass);
+      router.push("/");
+    } catch (error: unknown) {
+      toast.error(`Login failed: ${error instanceof Error ? error.message : "Unknown error"}`);
+      setLoading(false);
+    }
+  };
+
   const logout = async () => {
     setLoading(true);
     await signOut(auth);
@@ -75,7 +87,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, roleData, loading, login, logout }}>
+    <AuthContext.Provider value={{ user, roleData, loading, login, loginWithEmail, logout }}>
       {children}
     </AuthContext.Provider>
   );
