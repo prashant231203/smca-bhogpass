@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { getDb } from "@/lib/firebase";
 const db = getDb();
 import { collection, addDoc, getDocs, query, where, onSnapshot, doc, updateDoc, deleteDoc, writeBatch } from "firebase/firestore";
-import { Loader2, Plus, Calendar, Users, Mail, Phone, Users2, Download, Upload, FileSpreadsheet, DownloadCloud, Trash2 } from "lucide-react";
+import { Loader2, Plus, Calendar, Users, Mail, Phone, Users2, Download, Upload, FileSpreadsheet, DownloadCloud, Trash2, Pencil, ArrowLeft, X } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { Event, Coupon, Member, PreRegistration } from "@/lib/types";
@@ -41,6 +41,7 @@ export default function AdminPage() {
   const [couponSearch, setCouponSearch] = useState("");
   const [loadingAttendees, setLoadingAttendees] = useState(false);
   const [eventStats, setEventStats] = useState<Record<string, { issued: number, scanned: number }>>({});
+  const [editingEventId, setEditingEventId] = useState<string | null>(null);
 
   // Member State
   const [members, setMembers] = useState<(Member & { id: string })[]>([]);
@@ -183,6 +184,24 @@ export default function AdminPage() {
     }
   };
 
+  const handleEditEvent = (evt: Event & { id: string }) => {
+    setEditingEventId(evt.id);
+    setEventName(evt.name);
+    
+    if (evt.hasTime) {
+      const parts = evt.date.split(" ");
+      setEventDate(parts[0]);
+      setEventTime(parts.slice(1).join(" "));
+    } else {
+      setEventDate(evt.date);
+      setEventTime("");
+    }
+    
+    setEventNotes(evt.notes || "");
+    setEventFoodMenu(evt.foodMenu ? evt.foodMenu.join(", ") : "");
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   const handleCreateEvent = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
@@ -190,19 +209,27 @@ export default function AdminPage() {
     
     try {
       const formattedDate = eventTime ? `${eventDate} ${eventTime}` : eventDate;
-
-      const newEvent: Event = {
+      const eventData = {
         name: eventName,
         date: formattedDate,
         hasTime: !!eventTime,
-        isActive: true,
-        createdBy: user.uid,
         ...(eventNotes && { notes: eventNotes }),
         ...(eventFoodMenu && { foodMenu: eventFoodMenu.split(",").map(i => i.trim()).filter(Boolean) })
       };
-      
-      const docRef = await addDoc(collection(db!, "events"), newEvent);
-      toast.success("Event active! Awaiting pass generation via Food CSV or Pre-Registration.");
+
+      if (editingEventId) {
+        await updateDoc(doc(db!, "events", editingEventId), eventData);
+        toast.success("Event updated successfully!");
+        setEditingEventId(null);
+      } else {
+        const newEvent: Event = {
+          ...eventData,
+          isActive: true,
+          createdBy: user.uid,
+        };
+        await addDoc(collection(db!, "events"), newEvent);
+        toast.success("Event active! Awaiting pass generation via Food CSV or Pre-Registration.");
+      }
 
       setEventName("");
       setEventDate("");
@@ -211,7 +238,7 @@ export default function AdminPage() {
       setEventFoodMenu("");
       loadEvents();
     } catch(err: unknown) {
-      toast.error(err instanceof Error ? err.message : "Failed to create event");
+      toast.error(err instanceof Error ? err.message : "Failed to save event");
     } finally {
        setIsCreatingEvent(false);
     }
@@ -626,14 +653,16 @@ export default function AdminPage() {
           </TabsList>
           
           <TabsContent value="events" className="space-y-6">
-            <Card className="border-0 shadow-sm ring-1 ring-zinc-200 overflow-hidden rounded-2xl">
-              <div className="bg-gradient-to-r from-indigo-500 to-indigo-600 h-2 w-full"></div>
-              <CardHeader className="pt-6 sm:px-8">
-                <CardTitle className="text-xl">Create Active Event</CardTitle>
-                <CardDescription>
-                  Initiating an event will instantly map the entire database and generate singular QR passes per familial individual.
-                </CardDescription>
-              </CardHeader>
+            {!selectedEventId && (
+              <>
+                <Card className="border-0 shadow-sm ring-1 ring-zinc-200 overflow-hidden rounded-2xl">
+                  <div className="bg-gradient-to-r from-indigo-500 to-indigo-600 h-2 w-full"></div>
+                  <CardHeader className="pt-6 sm:px-8">
+                    <CardTitle className="text-xl">{editingEventId ? "Edit Event" : "Create Active Event"}</CardTitle>
+                    <CardDescription>
+                      {editingEventId ? "Update your event details here." : "Initiating an event will instantly map the entire database and generate singular QR passes per familial individual."}
+                    </CardDescription>
+                  </CardHeader>
               <CardContent className="sm:px-8 pb-8">
                 <form onSubmit={handleCreateEvent} className="space-y-5">
                   <div className="space-y-2">
@@ -691,10 +720,20 @@ export default function AdminPage() {
                       className="bg-zinc-50/50"
                     />
                   </div>
-                  <Button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 h-12 text-md rounded-xl" disabled={isCreatingEvent}>
-                    {isCreatingEvent ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : <Plus className="w-5 h-5 mr-2" />}
-                    Ignite Event Engine
-                  </Button>
+                  <div className="flex gap-3">
+                    <Button type="submit" className="flex-1 bg-indigo-600 hover:bg-indigo-700 h-12 text-md rounded-xl" disabled={isCreatingEvent}>
+                      {isCreatingEvent ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : (editingEventId ? <Pencil className="w-5 h-5 mr-2" /> : <Plus className="w-5 h-5 mr-2" />)}
+                      {editingEventId ? "Save Changes" : "Ignite Event Engine"}
+                    </Button>
+                    {editingEventId && (
+                      <Button type="button" variant="outline" className="flex-1 h-12 text-md rounded-xl" onClick={() => {
+                        setEditingEventId(null);
+                        setEventName(""); setEventDate(""); setEventTime(""); setEventNotes(""); setEventFoodMenu("");
+                      }}>
+                        Cancel Edit
+                      </Button>
+                    )}
+                  </div>
                 </form>
               </CardContent>
             </Card>
@@ -718,9 +757,14 @@ export default function AdminPage() {
                                <span className="leading-tight">{evt.name}</span>
                                {evt.isActive && <span className="shrink-0 inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] uppercase font-bold tracking-widest bg-emerald-100 text-emerald-800">Active</span>}
                              </div>
-                             <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); handleDeleteEvent(evt.id, evt.name); }} className="h-8 w-8 shrink-0 text-zinc-400 hover:text-rose-600 hover:bg-rose-50 -mt-1 -mr-2 transition-colors">
-                               <Trash2 className="w-4 h-4" />
-                             </Button>
+                             <div className="flex items-center">
+                               <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); handleEditEvent(evt); }} className="h-8 w-8 shrink-0 text-zinc-400 hover:text-indigo-600 hover:bg-indigo-50 -mt-1 transition-colors">
+                                 <Pencil className="w-4 h-4" />
+                               </Button>
+                               <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); handleDeleteEvent(evt.id, evt.name); }} className="h-8 w-8 shrink-0 text-zinc-400 hover:text-rose-600 hover:bg-rose-50 -mt-1 -mr-2 transition-colors">
+                                 <Trash2 className="w-4 h-4" />
+                               </Button>
+                             </div>
                           </CardTitle>
                           <div className="flex flex-col mt-3 space-y-1.5">
                             <span className="flex items-center text-sm text-zinc-600 font-medium">
@@ -743,7 +787,7 @@ export default function AdminPage() {
 
                         <CardContent className="px-6 pt-3 pb-5 flex flex-col sm:flex-row gap-3">
                           <Button variant="secondary" size="sm" onClick={() => setSelectedEventId(evt.id)} className="w-full sm:w-1/2 rounded-lg bg-zinc-100 hover:bg-zinc-200 text-zinc-700 font-semibold shadow-none border border-zinc-200">
-                            <Users className="w-4 h-4 mr-2 text-zinc-500" /> View Live Feed
+                            <Users className="w-4 h-4 mr-2 text-zinc-500" /> View Attendees
                           </Button>
                           <div className="w-full sm:w-1/2 relative">
                             <Button variant="outline" size="sm" className="w-full rounded-lg text-emerald-700 border-emerald-200 hover:bg-emerald-50 bg-white" disabled={isUploadingFood === evt.id} onClick={() => {
@@ -771,17 +815,24 @@ export default function AdminPage() {
                        }
                      }} 
                    />
-                 </div>
+                  </div>
               )}
+              </div>
+              </>
+            )}
 
-              {selectedEventId && (
-                <Card className="mt-8 border-0 shadow-md ring-1 ring-zinc-200 rounded-2xl overflow-hidden">
+            {selectedEventId && (
+              <div className="space-y-4">
+                <Button variant="ghost" onClick={() => setSelectedEventId(null)} className="text-zinc-500 hover:text-zinc-900 -ml-2">
+                  <ArrowLeft className="w-4 h-4 mr-2" /> Back to Events
+                </Button>
+                <Card className="border-0 shadow-md ring-1 ring-zinc-200 rounded-2xl overflow-hidden">
                   <Tabs defaultValue="all_passes" className="w-full">
                     <CardHeader className="bg-zinc-100/50 border-b border-zinc-100 pb-4 pt-6">
                       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                         <div>
-                          <CardTitle className="text-lg flex items-center gap-2">
-                            <span>Event Intelligence Panel</span>
+                          <CardTitle className="text-xl flex items-center gap-2">
+                            <span>{events.find(e => e.id === selectedEventId)?.name || 'Event Details'}</span>
                           </CardTitle>
                           <CardDescription>
                             Real-time tracking of passes and guest check-ins.
@@ -1003,8 +1054,8 @@ export default function AdminPage() {
                     </TabsContent>
                   </Tabs>
                 </Card>
-              )}
-            </div>
+              </div>
+            )}
           </TabsContent>
           
           <TabsContent value="members" className="space-y-6">
