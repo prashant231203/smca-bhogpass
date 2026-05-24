@@ -43,7 +43,15 @@ export function ScannerComponent() {
         html5QrCode.current.pause();
       }
 
-      const couponRef = doc(db!, "coupons", qrText);
+      // Extract ID if the QR code is a full URL (e.g. https://.../pass/abcd)
+      let couponId = qrText;
+      if (qrText.includes("/pass/")) {
+        couponId = qrText.split("/pass/").pop() || qrText;
+      } else if (qrText.includes("/")) {
+        couponId = qrText.split("/").pop() || qrText;
+      }
+
+      const couponRef = doc(db!, "coupons", couponId);
       let holderName = "";
       let foodOrders: FoodOrder[] = [];
       let message = "";
