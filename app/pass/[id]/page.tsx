@@ -7,7 +7,7 @@ import { getDb } from "@/lib/firebase";
 const db = getDb();
 import { Coupon, Event } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Loader2, Calendar, MapPin, Tag } from "lucide-react";
+import { Loader2, Calendar, MapPin, Tag, MessageCircle } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 
 export default function PassPage() {
@@ -151,7 +151,28 @@ export default function PassPage() {
               </div>
             )}
             
-            <p className="text-xs text-center text-zinc-400">
+            <div className="bg-emerald-50 p-4 rounded-2xl border border-emerald-100 space-y-2 mt-6">
+              <div className="flex items-center gap-2 mb-2">
+                <MessageCircle className="w-5 h-5 text-emerald-600" />
+                <p className="text-xs font-bold uppercase tracking-wider text-emerald-800">WhatsApp Message</p>
+              </div>
+              <div className="text-sm text-zinc-700 whitespace-pre-wrap bg-white p-3.5 rounded-xl border border-emerald-100 shadow-sm font-medium leading-relaxed">
+{`Hello ${coupon.holderName},
+
+You are invited to *${event?.name || "Event"}* 🎉
+
+Your entry pass and QR code are ready. Please carry this pass at the venue for smooth check-in.
+
+🔗 Pass Link: https://smca-bhogpass.vercel.app/pass/${id as string}
+
+We look forward to seeing you at the event.
+
+Thank you,
+Team SMCA`}
+              </div>
+            </div>
+            
+            <p className="text-xs text-center text-zinc-400 mt-4">
               Please present this QR code at the entrance scanner. 
               {coupon.status === "scanned" && <span className="block mt-1 text-rose-500 font-bold">This pass has already been scanned.</span>}
             </p>
