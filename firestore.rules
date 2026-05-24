@@ -77,6 +77,7 @@ service cloud.firestore {
       allow list: if isSignedIn();
       allow create: if isAdmin() && isValidId(eventId) && isValidEvent(incoming());
       allow update: if isAdmin() && isValidId(eventId) && isValidEventUpdate(incoming());
+      allow delete: if isAdmin();
     }
 
     function isValidCouponCreate(data) {
@@ -125,6 +126,11 @@ service cloud.firestore {
                     existing().status == 'issued' && 
                     incoming().status == 'scanned' &&
                     incoming().diff(existing()).affectedKeys().hasOnly(['status', 'scannedAt', 'scannedBy', 'foodOrders', 'foodClaimed', 'foodClaimedAt', 'foodClaimedBy']);
+      allow delete: if isAdmin();
+    }
+
+    match /preRegistrations/{preRegId} {
+      allow read, write: if isAdmin();
     }
 
     function isValidPayment(data) {
