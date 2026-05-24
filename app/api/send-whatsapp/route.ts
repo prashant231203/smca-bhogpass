@@ -37,59 +37,53 @@ export async function POST(req: Request) {
       const firstPassUrl = passes[0]?.url || "";
       const passId = firstPassUrl.split('/').pop() || "";
 
-      for (const lang of tryLanguages) {
-        response = await fetch(`https://graph.facebook.com/v18.0/${phoneNumberId}/messages`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            messaging_product: 'whatsapp',
-            to: formattedPhone,
-            type: 'template',
-            template: {
-              name: templateName,
-              language: {
-                code: lang
+      response = await fetch(`https://graph.facebook.com/v18.0/${phoneNumberId}/messages`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          messaging_product: 'whatsapp',
+          to: formattedPhone,
+          type: 'template',
+          template: {
+            name: templateName,
+            language: {
+              code: "en_US"
+            },
+            components: [
+              {
+                type: 'body',
+                parameters: [
+                  { type: 'text', text: name }, // {{1}} Name
+                  { type: 'text', text: "SMCA" }, // {{2}} Business Name
+                  { type: 'text', text: "Bhog Pass" }, // {{3}} Appointment for
+                  { type: 'text', text: eventName }, // {{4}} Date/Event
+                  { type: 'text', text: "Event Time" } // {{5}} Time
+                ]
               },
-              components: [
-                {
-                  type: 'body',
-                  parameters: [
-                    { type: 'text', text: name }, // {{1}} Name
-                    { type: 'text', text: "SMCA" }, // {{2}} Business Name
-                    { type: 'text', text: "Bhog Pass" }, // {{3}} Appointment for
-                    { type: 'text', text: eventName }, // {{4}} Date/Event
-                    { type: 'text', text: "Event Time" } // {{5}} Time
-                  ]
-                },
-                {
-                  type: 'button',
-                  sub_type: 'url',
-                  index: '0',
-                  parameters: [
-                    { type: 'text', text: passId } // The dynamic suffix for the URL button
-                  ]
-                }
-              ]
-            }
-          })
-        });
+              {
+                type: 'button',
+                sub_type: 'url',
+                index: '0',
+                parameters: [
+                  { type: 'text', text: passId } // The dynamic suffix for the URL button
+                ]
+              }
+            ]
+          }
+        })
+      });
 
-        data = await response.json();
+      data = await response.json();
 
-        if (response.ok) {
-          console.log(`[WhatsApp Meta Template] Sent to ${formattedPhone}: ${passes.length} passes for ${eventName} using ${templateName}/${lang}`);
-          return NextResponse.json({ success: true, data });
-        }
-
-        if (data?.error?.code !== 132001) {
-          break;
-        }
-
-        console.warn(`[WhatsApp] Template ${templateName} not found in locale: ${lang}, trying next...`);
+      if (response.ok) {
+        console.log(`[WhatsApp Meta Template] Sent to ${formattedPhone}: ${passes.length} passes for ${eventName} using ${templateName}/en_US`);
+        return NextResponse.json({ success: true, data });
       }
+
+      console.warn(`[WhatsApp] Template ${templateName} failed in en_US.`);
 
       // Fallback to a regular text message if template is missing / not translated.
       if (data?.error?.code === 132001) {

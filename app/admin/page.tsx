@@ -11,8 +11,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { getDb } from "@/lib/firebase";
 const db = getDb();
-import { collection, addDoc, getDocs, query, where, onSnapshot, doc, updateDoc } from "firebase/firestore";
-import { Loader2, Plus, Calendar, Users, Mail, Phone, Users2, Download, Upload, FileSpreadsheet, DownloadCloud } from "lucide-react";
+import { collection, addDoc, getDocs, query, where, onSnapshot, doc, updateDoc, deleteDoc, writeBatch } from "firebase/firestore";
+import { Loader2, Plus, Calendar, Users, Mail, Phone, Users2, Download, Upload, FileSpreadsheet, DownloadCloud, Trash2 } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { Event, Coupon, Member, PreRegistration } from "@/lib/types";
@@ -149,6 +149,37 @@ export default function AdminPage() {
        setPreRegistrations(preRegs.sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
     } catch(err) {
       console.error(err);
+    }
+  };
+
+  const handleDeleteEvent = async (eventId: string, eventName: string) => {
+    if (!confirm(`Are you absolutely sure you want to delete the event "${eventName}"? This will also delete ALL passes, scans, and pre-registrations associated with this event. This action CANNOT be undone.`)) return;
+    
+    try {
+      const batch = writeBatch(db!);
+      
+      // Delete the event document
+      batch.delete(doc(db!, "events", eventId));
+
+      // Query all coupons for this event
+      const couponsQ = query(collection(db!, "coupons"), where("eventId", "==", eventId));
+      const couponsSnap = await getDocs(couponsQ);
+      couponsSnap.docs.forEach((d) => batch.delete(d.ref));
+
+      // Query all preRegistrations for this event
+      const preRegQ = query(collection(db!, "preRegistrations"), where("eventId", "==", eventId));
+      const preRegSnap = await getDocs(preRegQ);
+      preRegSnap.docs.forEach((d) => batch.delete(d.ref));
+
+      await batch.commit();
+      toast.success("Event and all associated data deleted successfully.");
+      
+      if (selectedEventId === eventId) {
+         setSelectedEventId(null);
+      }
+    } catch (e) {
+      console.error(e);
+      toast.error("Failed to delete event data.");
     }
   };
 
@@ -683,8 +714,13 @@ export default function AdminPage() {
                         <div className="absolute top-0 left-0 w-1.5 h-full bg-emerald-500"></div>
                         <CardHeader className="pl-6 pb-2 pt-5">
                           <CardTitle className="flex items-start justify-between text-lg">
-                             <span className="leading-tight">{evt.name}</span>
-                             {evt.isActive && <span className="shrink-0 ml-4 inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] uppercase font-bold tracking-widest bg-emerald-100 text-emerald-800">Active</span>}
+                             <div className="flex flex-wrap items-center gap-2">
+                               <span className="leading-tight">{evt.name}</span>
+                               {evt.isActive && <span className="shrink-0 inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] uppercase font-bold tracking-widest bg-emerald-100 text-emerald-800">Active</span>}
+                             </div>
+                             <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); handleDeleteEvent(evt.id, evt.name); }} className="h-8 w-8 shrink-0 text-zinc-400 hover:text-rose-600 hover:bg-rose-50 -mt-1 -mr-2 transition-colors">
+                               <Trash2 className="w-4 h-4" />
+                             </Button>
                           </CardTitle>
                           <div className="flex flex-col mt-3 space-y-1.5">
                             <span className="flex items-center text-sm text-zinc-600 font-medium">
