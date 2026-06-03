@@ -21,6 +21,7 @@ export default function AccountantPage() {
   const [amount, setAmount] = useState("");
   const [memberName, setMemberName] = useState("");
   const [phone, setPhone] = useState("");
+  const [email, setEmail] = useState("");
   const [purpose, setPurpose] = useState<"Donation" | "Membership Fee" | "Other">("Donation");
   const [trustAccount, setTrustAccount] = useState<"Trust" | "SMCA">("SMCA");
   const [mode, setMode] = useState<"Cash" | "Card" | "Online">("Cash");
@@ -64,6 +65,7 @@ export default function AccountantPage() {
         mode,
         memberName: memberName.trim(),
         phone: phone.trim(),
+        email: email.trim(),
         purpose,
         collectorUid: user.uid,
         timestamp: new Date().toISOString()
@@ -91,11 +93,39 @@ export default function AccountantPage() {
         }
       }
 
+      if (email.trim()) {
+        try {
+          const res = await fetch("/api/send-receipt", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              email: email.trim(),
+              name: memberName.trim(),
+              amount: Number(amount),
+              mode,
+              trustAccount,
+              purpose,
+              receiptId,
+              date: new Date().toLocaleDateString()
+            })
+          });
+          if (res.ok) {
+            toast.success("Email receipt sent successfully!");
+          } else {
+            toast.error("Failed to send email receipt.");
+          }
+        } catch (e) {
+          console.error("Email failed", e);
+          toast.error("Failed to send email receipt.");
+        }
+      }
+
       toast.success("Payment recorded successfully.");
       setRecentPayments([{ id: docRef.id, ...paymentData }, ...recentPayments].slice(0, 5));
       setAmount("");
       setMemberName("");
       setPhone("");
+      setEmail("");
       setPurpose("Donation");
     } catch (err: any) {
       toast.error(err.message || "Failed to record payment");
@@ -162,6 +192,18 @@ export default function AccountantPage() {
                       className="bg-zinc-50/50"
                     />
                   </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="email" className="font-semibold text-zinc-700">Email Address <span className="font-normal text-zinc-400">(Opt - for e-receipt)</span></Label>
+                  <Input 
+                    id="email" 
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="devotee@example.com"
+                    className="bg-zinc-50/50"
+                  />
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

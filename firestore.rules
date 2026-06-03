@@ -135,13 +135,15 @@ service cloud.firestore {
 
     function isValidPayment(data) {
       return data.keys().hasAll(['amount', 'trustAccount', 'mode', 'memberName', 'collectorUid', 'timestamp']) &&
-             data.keys().size() == 6 &&
              data.amount is number && data.amount > 0 &&
              data.trustAccount in ['Trust', 'SMCA'] &&
              data.mode in ['Cash', 'Card', 'Online'] &&
              data.memberName is string && data.memberName.size() >= 1 && data.memberName.size() <= 150 &&
              data.collectorUid == request.auth.uid &&
-             data.timestamp is string && data.timestamp.size() <= 50;
+             data.timestamp is string && data.timestamp.size() <= 50 &&
+             (data.keys().hasAll(['email']) ? (data.email is string && data.email.size() <= 200) : true) &&
+             (data.keys().hasAll(['phone']) ? (data.phone is string && data.phone.size() <= 20) : true) &&
+             (data.keys().hasAll(['purpose']) ? (data.purpose is string && data.purpose.size() <= 500) : true);
     }
 
     match /payments/{payId} {

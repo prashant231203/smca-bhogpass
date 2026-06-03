@@ -72,6 +72,7 @@ export interface Payment {
   trustAccount: "Trust" | "SMCA";
   mode: "Cash" | "Card" | "Online";
   memberName: string;
+  email?: string;
   phone?: string;
   purpose?: string;
   collectorUid: string;
