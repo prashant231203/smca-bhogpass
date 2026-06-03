@@ -97,7 +97,7 @@ service cloud.firestore {
       return data.keys().hasAll(['eventId', 'holderName', 'status', 'source']) &&
              data.eventId is string && data.eventId.size() <= 128 &&
              data.holderName is string && data.holderName.size() >= 1 && data.holderName.size() <= 150 &&
-             data.status == 'scanned' &&
+             data.status in ['issued', 'scanned', 'partially_scanned'] &&
              data.source in ['member', 'guest'] &&
              (data.keys().hasAll(['memberId']) ? (data.memberId is string && data.memberId.size() <= 128) : true) &&
              (data.keys().hasAll(['notes']) ? (data.notes is string && data.notes.size() <= 1000) : true) &&
@@ -123,8 +123,8 @@ service cloud.firestore {
                     existing().holderName == incoming().holderName &&
                     existing().source == incoming().source &&
                     (existing().keys().hasAll(['memberId']) ? existing().memberId == incoming().memberId : true) &&
-                    existing().status == 'issued' && 
-                    incoming().status == 'scanned' &&
+                    existing().status in ['issued', 'partially_scanned'] && 
+                    incoming().status in ['partially_scanned', 'scanned'] &&
                     incoming().diff(existing()).affectedKeys().hasOnly(['status', 'scannedAt', 'scannedBy', 'foodOrders', 'foodClaimed', 'foodClaimedAt', 'foodClaimedBy']);
       allow delete: if isAdmin();
     }

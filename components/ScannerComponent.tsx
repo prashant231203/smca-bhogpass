@@ -41,12 +41,26 @@ export function ScannerComponent() {
       // We removed the pause() call here to prevent html5-qrcode state transition crashes.
       // The isProcessingRef flag ensures we ignore incoming frames while processing.
 
-      // Extract ID if the QR code is a full URL (e.g. https://.../pass/abcd)
+      // Extract ID and target item if the QR code is a full URL (e.g. https://.../pass/abcd?item=Biryani)
       let couponId = qrText;
-      if (qrText.includes("/pass/")) {
-        couponId = qrText.split("/pass/").pop() || qrText;
-      } else if (qrText.includes("/")) {
-        couponId = qrText.split("/").pop() || qrText;
+      let targetItem: string | null = null;
+      
+      try {
+        const url = new URL(qrText);
+        targetItem = url.searchParams.get("item");
+        couponId = url.pathname.split("/pass/").pop() || couponId;
+      } catch (e) {
+        // Fallback parsing if not a valid URL
+        if (qrText.includes("/pass/")) {
+           const parts = qrText.split("?");
+           couponId = parts[0].split("/pass/").pop() || qrText;
+           if (parts.length > 1) {
+             const searchParams = new URLSearchParams(parts[1]);
+             targetItem = searchParams.get("item");
+           }
+        } else if (qrText.includes("/")) {
+          couponId = qrText.split("/").pop() || qrText;
+        }
       }
 
       const couponRef = doc(db!, "coupons", couponId);
@@ -62,11 +76,10 @@ export function ScannerComponent() {
         holderName = data.holderName;
         
         if (data.status === "scanned") {
-          throw new Error(`Already scanned! Holder: ${data.holderName}`);
+          throw new Error(`Already fully scanned! Holder: ${data.holderName}`);
         }
         
         const updateData: any = {
-          status: "scanned",
           scannedAt: new Date().toISOString(),
           scannedBy: user.uid
         };
@@ -77,16 +90,44 @@ export function ScannerComponent() {
           normalizedOrders = [{ item: data.foodItem, quantity: 1, claimed: data.foodClaimed ? 1 : 0 }];
         }
 
-        if (normalizedOrders.length > 0) {
+        if (targetItem) {
+          // --- PARTIAL SCAN LOGIC ---
+          const orderIndex = normalizedOrders.findIndex(o => o.item === targetItem);
+          if (orderIndex === -1) {
+            throw new Error(`Item "${targetItem}" not found on this pass.`);
+          }
+          
+          const order = normalizedOrders[orderIndex];
+          if (order.claimed >= order.quantity) {
+            throw new Error(`"${targetItem}" is already fully claimed (${order.quantity}/${order.quantity})!`);
+          }
+          
+          // Increment claim
+          normalizedOrders[orderIndex].claimed += 1;
           foodOrders = normalizedOrders;
-          // Claim all food orders in full on the first (and only) scan
-          updateData.foodOrders = normalizedOrders.map(o => ({ ...o, claimed: o.quantity }));
-          updateData.foodClaimed = true;
-          updateData.foodClaimedAt = new Date().toISOString();
-          updateData.foodClaimedBy = user.uid;
-          message = "Food claimed & entry approved!";
+          
+          updateData.foodOrders = normalizedOrders;
+          message = `${targetItem} claimed (${normalizedOrders[orderIndex].claimed}/${order.quantity})`;
+          
+          // Check if everything is fully claimed (excluding Entry Pass if they aren't scanning it)
+          // Wait, if it's fully claimed, mark as scanned. Otherwise partially_scanned.
+          const allClaimed = normalizedOrders.every(o => o.claimed >= o.quantity);
+          updateData.status = allClaimed ? "scanned" : "partially_scanned";
+
         } else {
-          message = "Entry Approved!";
+          // --- LEGACY FULL SCAN LOGIC ---
+          if (normalizedOrders.length > 0) {
+            foodOrders = normalizedOrders;
+            // Claim all food orders in full on the first (and only) scan
+            updateData.foodOrders = normalizedOrders.map(o => ({ ...o, claimed: o.quantity }));
+            updateData.foodClaimed = true;
+            updateData.foodClaimedAt = new Date().toISOString();
+            updateData.foodClaimedBy = user.uid;
+            message = "All items claimed & entry approved!";
+          } else {
+            message = "Entry Approved!";
+          }
+          updateData.status = "scanned";
         }
 
         transaction.update(couponRef, updateData);

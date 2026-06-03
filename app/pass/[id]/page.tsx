@@ -87,17 +87,45 @@ export default function PassPage() {
         </CardHeader>
         
         <CardContent className="px-6 pb-8 text-center space-y-6">
-          <div className="bg-white p-4 rounded-3xl shadow-sm border mx-auto inline-block border-zinc-200">
-             <QRCodeSVG
-               value={id as string}
-               size={200}
-               level="H"
-               className="mx-auto"
-               includeMargin={false}
-             />
-          </div>
+          {coupon.foodOrders && coupon.foodOrders.filter(o => o.item !== "Entry Pass").length > 0 ? (
+            <div className="space-y-8 mt-4">
+              {coupon.foodOrders.filter(o => o.item !== "Entry Pass").map((order, idx) => {
+                const isFullyClaimed = order.claimed >= order.quantity;
+                const qrUrl = `${window.location.origin}/pass/${id as string}?item=${encodeURIComponent(order.item)}`;
+                
+                return (
+                  <div key={idx} className={`bg-white p-5 rounded-3xl shadow-sm border mx-auto inline-block border-zinc-200 transition-opacity ${isFullyClaimed ? 'opacity-50 grayscale' : ''}`}>
+                    <h3 className="text-lg font-black text-zinc-800 mb-1">{order.item}</h3>
+                    <p className="text-xs font-bold uppercase tracking-widest text-indigo-500 mb-4">
+                      {isFullyClaimed ? "Fully Claimed" : `Claimed: ${order.claimed} / ${order.quantity}`}
+                    </p>
+                    
+                    <div className="relative">
+                      <QRCodeSVG
+                        value={qrUrl}
+                        size={180}
+                        level="H"
+                        className="mx-auto"
+                        includeMargin={false}
+                      />
+                      {isFullyClaimed && (
+                        <div className="absolute inset-0 flex flex-col items-center justify-center bg-white/80 backdrop-blur-[2px] rounded-xl">
+                          <span className="text-xl">✅</span>
+                          <p className="text-sm font-black text-emerald-600 mt-1">Claimed</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="bg-white p-6 rounded-3xl shadow-sm border border-zinc-200 mt-4">
+               <p className="text-sm font-medium text-zinc-500">No scannable food items on this pass.</p>
+            </div>
+          )}
           
-          <div className="space-y-4 text-left">
+          <div className="space-y-4 text-left mt-8">
             {event && (
               <div className="bg-zinc-50 p-4 rounded-2xl border border-zinc-100 space-y-3">
                 <div className="flex items-start gap-3">
@@ -132,8 +160,8 @@ export default function PassPage() {
                 {coupon.foodOrders && coupon.foodOrders.length > 0 && (
                   <div className="pt-3 border-t border-zinc-200 bg-amber-50/50 -mx-4 px-4 pb-4 rounded-b-2xl">
                     <div className="flex items-center gap-2 mb-3">
-                      <span className="text-xl">🍲</span>
-                      <p className="text-xs font-bold uppercase tracking-wider text-amber-800">Food Orders</p>
+                      <span className="text-xl">📋</span>
+                      <p className="text-xs font-bold uppercase tracking-wider text-amber-800">Pass Details</p>
                     </div>
                     <div className="space-y-2">
                       {coupon.foodOrders.map((order, idx) => (
