@@ -1,19 +1,20 @@
 import { Resend } from 'resend';
 
-const resend = new Resend(process.env.RESEND_API_KEY);
-
 export async function POST(req: Request) {
   try {
+    const apiKey = process.env.RESEND_API_KEY;
+    if (!apiKey) {
+      console.warn("RESEND_API_KEY is not set. Email not sent.");
+      return new Response(JSON.stringify({ error: "Email provider not configured" }), { status: 500 });
+    }
+    
+    const resend = new Resend(apiKey);
+    
     const body = await req.json();
     const { email, name, amount, mode, trustAccount, purpose, receiptId, date } = body;
 
     if (!email) {
       return new Response(JSON.stringify({ error: "Email is required" }), { status: 400 });
-    }
-
-    if (!process.env.RESEND_API_KEY) {
-      console.warn("RESEND_API_KEY is not set. Email not sent.");
-      return new Response(JSON.stringify({ error: "Email provider not configured" }), { status: 500 });
     }
 
     const htmlContent = `
