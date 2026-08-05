@@ -26,7 +26,7 @@ export async function POST(req: Request) {
         .map((p: Record<string, string>) => `👉 ${p.label}: ${p.url}`)
         .join('\n');
 
-      const templateName = process.env.JALPI_WHATSAPP_PASSES_TEMPLATE_NAME || 'event_pass';
+      const templateName = process.env.JALPI_WHATSAPP_PASSES_TEMPLATE_NAME || 'bhog_pass';
 
       const response = await fetch(`https://app.jalpi.com/api/v1/sendTemplateMessage`, {
         method: 'POST',
@@ -36,7 +36,7 @@ export async function POST(req: Request) {
         body: JSON.stringify({
           key: apiKey,
           to: formattedPhone,
-          languageCode: 'en_US',
+          languageCode: 'en_GB',
           TemplateName: templateName,
           headertype: 'text',
           headertext: '🎫 SMCA Event Pass',

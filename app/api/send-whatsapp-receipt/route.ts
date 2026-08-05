@@ -30,7 +30,7 @@ export async function POST(req: Request) {
         body: JSON.stringify({
           key: apiKey,
           to: formattedPhone,
-          languageCode: 'en_US',
+          languageCode: 'en_GB',
           TemplateName: templateName,
           headertype: 'text',
           headertext: '🎫 SMCA Receipt',
