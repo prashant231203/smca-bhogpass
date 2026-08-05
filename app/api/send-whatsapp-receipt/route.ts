@@ -32,8 +32,6 @@ export async function POST(req: Request) {
           to: formattedPhone,
           languageCode: 'en_GB',
           TemplateName: templateName,
-          headertype: 'text',
-          headertext: '🎫 SMCA Receipt',
           BodyParameter: [
             { type: 'text', text: name },
             { type: 'text', text: purpose },

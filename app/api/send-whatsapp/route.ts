@@ -38,8 +38,6 @@ export async function POST(req: Request) {
           to: formattedPhone,
           languageCode: 'en_GB',
           TemplateName: templateName,
-          headertype: 'text',
-          headertext: '🎫 SMCA Event Pass',
           BodyParameter: [
             { type: 'text', text: name },          // {{1}}
             { type: 'text', text: eventName },     // {{2}}
