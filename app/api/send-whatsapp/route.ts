@@ -23,8 +23,8 @@ export async function POST(req: Request) {
 
     if (apiKey) {
       const passesListString = passes
-        .map((p: Record<string, string>) => `👉 ${p.label}: ${p.url}`)
-        .join('\n');
+        .map((p: Record<string, string>) => `> ${p.label}: ${p.url}`)
+        .join(', ');
 
       const templateName = process.env.JALPI_WHATSAPP_PASSES_TEMPLATE_NAME || 'bhog_pass';
 
