@@ -28,16 +28,16 @@ export async function POST(req: Request) {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          key: apiKey,
+          Key: apiKey,
           to: formattedPhone,
           languageCode: 'en_GB',
           TemplateName: templateName,
           BodyParameter: [
-            { type: 'text', text: name },
-            { type: 'text', text: purpose },
-            { type: 'text', text: amount.toString() },
-            { type: 'text', text: mode },
-            { type: 'text', text: receiptId }
+            { type: 'TEXT', text: name },
+            { type: 'TEXT', text: purpose },
+            { type: 'TEXT', text: amount.toString() },
+            { type: 'TEXT', text: mode },
+            { type: 'TEXT', text: receiptId }
           ]
         })
       });

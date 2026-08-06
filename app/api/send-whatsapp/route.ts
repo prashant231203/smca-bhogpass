@@ -34,14 +34,14 @@ export async function POST(req: Request) {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          key: apiKey,
+          Key: apiKey,
           to: formattedPhone,
           languageCode: 'en_GB',
           TemplateName: templateName,
           BodyParameter: [
-            { type: 'text', text: name },          // {{1}}
-            { type: 'text', text: eventName },     // {{2}}
-            { type: 'text', text: passesListString } // {{3}}
+            { type: 'TEXT', text: name },          // {{1}}
+            { type: 'TEXT', text: eventName },     // {{2}}
+            { type: 'TEXT', text: passesListString } // {{3}}
           ]
         })
       });
