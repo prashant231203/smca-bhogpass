@@ -22,39 +22,60 @@ export async function POST(req: Request) {
     }
 
     if (apiKey) {
-      const passesListString = passes
-        .map((p: Record<string, string>) => `> ${p.label}: ${p.url}`)
-        .join(', ');
+      const templateName = process.env.JALPI_WHATSAPP_PASSES_TEMPLATE_NAME || 'bhog_pass_image';
+      let overallSuccess = true;
+      const responses = [];
 
-      const templateName = process.env.JALPI_WHATSAPP_PASSES_TEMPLATE_NAME || 'bhog_pass';
+      for (let i = 0; i < passes.length; i++) {
+        const pass = passes[i];
+        const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&format=png&data=${encodeURIComponent(pass.url)}`;
 
-      const response = await fetch(`https://app.jalpi.com/api/v1/sendTemplateMessage`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          Key: apiKey,
-          to: formattedPhone,
-          languageCode: 'en_GB',
-          TemplateName: templateName,
-          BodyParameter: [
-            { type: 'TEXT', text: name },          // {{1}}
-            { type: 'TEXT', text: eventName },     // {{2}}
-            { type: 'TEXT', text: passesListString } // {{3}}
-          ]
-        })
-      });
+        try {
+          const response = await fetch(`https://app.jalpi.com/api/v1/sendTemplateMessage`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              Key: apiKey,
+              to: formattedPhone,
+              languageCode: 'en_GB',
+              TemplateName: templateName,
+              headertype: 'image',
+              link: qrImageUrl,
+              BodyParameter: [
+                { type: 'TEXT', text: name },          // {{1}}
+                { type: 'TEXT', text: eventName },     // {{2}}
+                { type: 'TEXT', text: pass.label }     // {{3}}
+              ]
+            })
+          });
 
-      const data = await response.json();
+          const data = await response.json();
+          responses.push(data);
 
-      if (response.ok) {
-        console.log(`[WhatsApp Jalpi Template] Sent to ${formattedPhone}: ${passes.length} passes for ${eventName}`);
-        return NextResponse.json({ success: true, data });
+          if (!response.ok || data.ErrorCode !== "000") {
+            overallSuccess = false;
+            console.error(`Jalpi API error for pass ${pass.label}:`, data);
+          } else {
+            console.log(`[WhatsApp Jalpi Template] Sent pass ${pass.label} to ${formattedPhone}`);
+          }
+        } catch (err) {
+          console.error(`Failed to send pass ${pass.label}:`, err);
+          overallSuccess = false;
+        }
+
+        // Add a 1-second delay between sending passes to avoid rate limits
+        if (i < passes.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
       }
 
-      console.error("Jalpi API error (template message):", data);
-      throw new Error(data?.message || "Failed to send Jalpi WhatsApp template message");
+      if (overallSuccess) {
+        return NextResponse.json({ success: true, data: responses });
+      } else {
+        throw new Error("Failed to send one or more WhatsApp messages. Check server logs.");
+      }
     } else {
       // For now, we simulate success if keys aren't configured so the application logic completes without crashing
       console.log(`[WhatsApp Simulated Template] To ${formattedPhone}: ${passes.length} passes for ${eventName} (Jalpi keys not set)`);

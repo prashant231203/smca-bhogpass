@@ -4,7 +4,7 @@ async function testWhatsapp() {
   const url = 'https://smca-bhogpass.vercel.app/api/send-whatsapp';
   
   const payload = {
-    phone: "9219435522",
+    phone: "7003512007",
     name: "Admin Tester",
     eventName: "Test Event Launch",
     passes: [
