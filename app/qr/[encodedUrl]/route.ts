@@ -16,11 +16,26 @@ export async function GET(request: Request, context: any) {
     // Decode from base64url format
     const decodedUrl = Buffer.from(encodedUrl, 'base64url').toString('utf-8');
     
-    // Redirect to the QR generator
+    // Fetch the image from qrserver instead of redirecting
+    // Meta does not follow redirects for media URLs
     const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&format=png&data=${encodeURIComponent(decodedUrl)}`;
-    return NextResponse.redirect(qrUrl);
+    
+    const imageResponse = await fetch(qrUrl);
+    if (!imageResponse.ok) {
+      throw new Error("Failed to fetch image");
+    }
+    
+    const arrayBuffer = await imageResponse.arrayBuffer();
+    
+    return new NextResponse(arrayBuffer, {
+      status: 200,
+      headers: {
+        'Content-Type': 'image/png',
+        'Cache-Control': 'public, max-age=31536000, immutable'
+      },
+    });
   } catch (error) {
-    console.error("QR Decode Error:", error);
-    return new NextResponse("Invalid Base64 URL", { status: 400 });
+    console.error("QR Decode/Fetch Error:", error);
+    return new NextResponse("Invalid Request", { status: 400 });
   }
 }
