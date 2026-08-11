@@ -28,7 +28,8 @@ export async function POST(req: Request) {
 
       for (let i = 0; i < passes.length; i++) {
         const pass = passes[i];
-        const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&format=png&data=${encodeURIComponent(pass.url)}`;
+        const base64Url = Buffer.from(pass.url).toString('base64url');
+        const qrImageUrl = `https://smca-bhogpass.vercel.app/qr/${base64Url}.png`;
 
         try {
           const response = await fetch(`https://app.jalpi.com/api/v1/sendTemplateMessage`, {
