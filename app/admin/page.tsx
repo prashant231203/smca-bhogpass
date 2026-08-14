@@ -346,7 +346,7 @@ export default function AdminPage() {
           let messagesSentCount = 0;
           let failureCount = 0;
           
-          const ignoreHeaders = ['srl no', 'smca member name', 'phone number (mandatory)', 'phone', 'whatsapp', 'name', 'sno', 'sl no', 'phone number', 'contact'];
+          const ignoreHeaders = ['timestamp', 'member name', 'srl no', 'smca member name', 'phone number (mandatory)', 'phone', 'whatsapp', 'name', 'sno', 'sl no', 'phone number', 'contact'];
 
           for (const row of rows) {
             // Normalize headers to find name and phone easily
@@ -355,7 +355,7 @@ export default function AdminPage() {
                 return acc;
             }, {});
 
-            const holderName = normalizedRow.smca_member_name || normalizedRow.name || normalizedRow.pass_holder;
+            const holderName = normalizedRow.member_name || normalizedRow.smca_member_name || normalizedRow.name || normalizedRow.pass_holder;
             let phoneNum = normalizedRow['phone_number_(mandatory)'] || normalizedRow.phone || normalizedRow.whatsapp || normalizedRow.contact || normalizedRow.phone_number;
 
             if (!holderName || !phoneNum) {
