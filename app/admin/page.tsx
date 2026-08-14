@@ -384,27 +384,27 @@ export default function AdminPage() {
 
             if (foodOrders.length > 0) {
               const passPromises = [];
-              const couponData = {
-                eventId: eventId,
-                holderName: holderName.toString().trim(),
-                status: "issued",
-                source: "guest",
-                foodOrders: foodOrders,
-                phone: phoneNum.toString().trim()
-              };
-
-              // Generate a summary for the WhatsApp message (e.g., "1x Non-Veg, 2x Veg")
-              const summaryLabel = foodOrders.map(o => {
-                const shortName = o.item.toLowerCase().includes('nonveg') || o.item.toLowerCase().includes('non-veg') ? 'Non-Veg' : 'Veg';
-                return `${o.quantity}x ${shortName}`;
-              }).join(', ');
-
-              const p = addDoc(collection(db!, "coupons"), couponData).then(ref => ({
-                id: ref.id,
-                label: summaryLabel,
-                url: `${window.location.origin}/pass/${ref.id}`
-              }));
-              passPromises.push(p);
+              
+              for (const order of foodOrders) {
+                const shortName = order.item.toLowerCase().includes('nonveg') || order.item.toLowerCase().includes('non-veg') ? 'Non-Veg' : 'Veg';
+                for (let i = 0; i < order.quantity; i++) {
+                  const individualCouponData = {
+                    eventId: eventId,
+                    holderName: holderName.toString().trim(),
+                    status: "issued",
+                    source: "guest",
+                    foodOrders: [{ item: order.item, quantity: 1, claimed: 0 }],
+                    phone: phoneNum.toString().trim()
+                  };
+                  
+                  const p = addDoc(collection(db!, "coupons"), individualCouponData).then(ref => ({
+                    id: ref.id,
+                    label: shortName,
+                    url: `${window.location.origin}/pass/${ref.id}`
+                  }));
+                  passPromises.push(p);
+                }
+              }
 
               const generatedPasses = await Promise.all(passPromises);
               passesGeneratedCount += generatedPasses.length;
