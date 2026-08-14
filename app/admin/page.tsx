@@ -393,9 +393,15 @@ export default function AdminPage() {
                 phone: phoneNum.toString().trim()
               };
 
+              // Generate a summary for the WhatsApp message (e.g., "1x Non-Veg, 2x Veg")
+              const summaryLabel = foodOrders.map(o => {
+                const shortName = o.item.toLowerCase().includes('nonveg') || o.item.toLowerCase().includes('non-veg') ? 'Non-Veg' : 'Veg';
+                return `${o.quantity}x ${shortName}`;
+              }).join(', ');
+
               const p = addDoc(collection(db!, "coupons"), couponData).then(ref => ({
                 id: ref.id,
-                label: holderName.toString().trim() + " (Family Pass)",
+                label: summaryLabel,
                 url: `${window.location.origin}/pass/${ref.id}`
               }));
               passPromises.push(p);
