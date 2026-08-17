@@ -30,7 +30,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               href="/admin" 
               className={buttonVariants({ variant: pathname.startsWith("/admin") ? "secondary" : "ghost", size: "sm" })}
             >
-              <Settings className="w-4 h-4 sm:mr-2" /> <span className="hidden sm:inline">Admin</span>
+              <Settings className="w-4 h-4 mr-1 sm:mr-2" /> <span className="text-xs sm:text-sm">Admin</span>
             </Link>
           )}
           {(roleData.role === "admin" || roleData.role === "receptionist") && (
@@ -38,7 +38,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               href="/scanner" 
               className={buttonVariants({ variant: pathname.startsWith("/scanner") ? "secondary" : "ghost", size: "sm" })}
             >
-              <ShieldAlert className="w-4 h-4 sm:mr-2" /> <span className="hidden sm:inline">Scanner</span>
+              <ShieldAlert className="w-4 h-4 mr-1 sm:mr-2" /> <span className="text-xs sm:text-sm">Scan</span>
             </Link>
           )}
           {(roleData.role === "admin" || roleData.role === "accountant") && (
@@ -46,7 +46,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               href="/accountant" 
               className={buttonVariants({ variant: pathname.startsWith("/accountant") ? "secondary" : "ghost", size: "sm" })}
             >
-              <BadgeIndianRupee className="w-4 h-4 sm:mr-2" /> <span className="hidden sm:inline">Accounts</span>
+              <BadgeIndianRupee className="w-4 h-4 mr-1 sm:mr-2" /> <span className="text-xs sm:text-sm">Accts</span>
             </Link>
           )}
           <Button variant="ghost" size="icon" onClick={() => logout()} title="Logout" className="ml-2">

@@ -463,7 +463,7 @@ export default function AdminPage() {
       const exportData = attendees.map(a => ({
         "Pass Holder": a.holderName,
         "Source": a.source,
-        "Status": a.status,
+        "Attended": a.scannedAt ? "Yes" : "No",
         "Scanned Time": a.scannedAt ? new Date(a.scannedAt).toLocaleString() : "Not Scanned",
         "Food Assigned": a.foodItem || "None",
         "Food Claimed": a.foodClaimed ? "Yes" : "No",
